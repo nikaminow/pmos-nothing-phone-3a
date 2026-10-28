@@ -28,7 +28,7 @@ cat > $W/etc/init.d/3a-hw <<'EOF'
 description="3a hardware bring-up"
 depend() {
 	need localmount
-	before tinydm
+	before tinydm greetd display-manager
 }
 start() {
 	ebegin "3a: cpufreq performance, display"
@@ -113,6 +113,21 @@ start() {
 EOF
 chmod +x $W/etc/init.d/3a-hw
 chroot $W rc-update add 3a-hw default >/dev/null
+# Phosh (postmarketos-ui-phosh): greetd + phrog instead of tinydm; panel DSI-2 at scale 3 (360x797)
+chroot $W rc-update del tinydm default >/dev/null 2>&1 || true
+chroot $W rc-update add greetd default >/dev/null
+mkdir -p $W/etc/phosh
+[ -f $W/etc/phosh/phoc.ini ] || cp $W/usr/share/phosh/phoc.ini $W/etc/phosh/phoc.ini
+for f in $W/etc/phosh/phoc.ini $W/usr/share/phrog/phoc.ini; do
+	grep -q 'output:DSI-2' $f || printf '\n[output:DSI-2]\nscale = 3\n' >> $f
+done
+# display cutout + rounded corners for Phosh (gmobile looks up <dt compatible>.json); the camera hole
+# from Android's product overlay FrameworksResCommon_Sys_Asteroids (circle at 540,68.6 r 21.5)
+if [ -f $P/nothing,asteroids.json ]; then
+	install -D -m 644 $P/nothing,asteroids.json $W/etc/gmobile/display-panels/nothing,asteroids.json
+	install -D -m 644 $P/nothing,asteroids.json $W/usr/share/gmobile/display-panels/nothing,asteroids.json
+	install -D -m 644 $P/nothing,asteroids.json $W/etc/xdg/gmobile/display-panels/nothing,asteroids.json
+fi
 # KWin output scale 3.1 (kwinoutputconfig.json from the phone, if pulled)
 [ -f $P/kwinoutputconfig.json ] && { mkdir -p $W/home/user/.config; cp $P/kwinoutputconfig.json $W/home/user/.config/; chown -R 10000:10000 $W/home/user/.config; }
 (cd $W && tar -czf $P/out/rootfs.tar.gz .)
