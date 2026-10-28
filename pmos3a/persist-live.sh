@@ -124,9 +124,13 @@ done
 # display cutout + rounded corners for Phosh (gmobile looks up <dt compatible>.json); the camera hole
 # from Android's product overlay FrameworksResCommon_Sys_Asteroids (circle at 540,68.6 r 21.5)
 if [ -f $P/nothing,asteroids.json ]; then
-	install -D -m 644 $P/nothing,asteroids.json $W/etc/gmobile/display-panels/nothing,asteroids.json
 	install -D -m 644 $P/nothing,asteroids.json $W/usr/share/gmobile/display-panels/nothing,asteroids.json
-	install -D -m 644 $P/nothing,asteroids.json $W/etc/xdg/gmobile/display-panels/nothing,asteroids.json
+	rm -rf $W/etc/gmobile $W/etc/xdg/gmobile
+	# gmobile reads panels only from its built-in GResource: overlay that path with the directory
+	O='G_RESOURCE_OVERLAYS=/mobi/phosh/gmobile/devices/display-panels=/usr/share/gmobile/display-panels'
+	sed -i /G_RESOURCE_OVERLAYS/d $W/etc/environment $W/etc/profile.d/soft-gl.sh
+	echo "$O" >> $W/etc/environment
+	echo "export $O" >> $W/etc/profile.d/soft-gl.sh
 fi
 # KWin output scale 3.1 (kwinoutputconfig.json from the phone, if pulled)
 [ -f $P/kwinoutputconfig.json ] && { mkdir -p $W/home/user/.config; cp $P/kwinoutputconfig.json $W/home/user/.config/; chown -R 10000:10000 $W/home/user/.config; }
