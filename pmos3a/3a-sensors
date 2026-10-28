@@ -13,7 +13,12 @@ rofs() {	# rofs PARTNAME MOUNTPOINT [extra mount args]
 if [ ! -d $Q/dsp ]; then
 	mkdir -p $Q/sensors
 	rofs dsp_a /mnt/dsp && cp -r /mnt/dsp $Q/dsp && umount /mnt/dsp
-	rofs persist /mnt/persist && cp -r /mnt/persist/sensors/registry/registry $Q/sensors/registry 2>/dev/null; umount /mnt/persist 2>/dev/null
+	if rofs persist /mnt/persist; then
+		cp -a /mnt/persist/sensors/registry/registry $Q/sensors/registry
+		cp -a /mnt/persist/sensors/registry/sns_reg_version /mnt/persist/sensors/registry/parsed_file_list.csv \
+			$Q/sensors/ 2>/dev/null
+		umount /mnt/persist
+	fi
 	# vendor_a lives in super (logical partition): dm-linear --readonly, erofs ro
 	S=$(part super)
 	blockdev --setro /dev/$S
@@ -27,7 +32,9 @@ if [ ! -d $Q/dsp ]; then
 	umount /mnt/vendor_s
 	dmsetup remove vendor_s
 	ln -sfn /sys/devices/soc0 $Q/socinfo
+	# hexagonrpcd runs as fastrpc; persist files are root-only (0600)
 	chown -R fastrpc:fastrpc $Q 2>/dev/null
+	chmod -R u+rwX,go+rX $Q/sensors
 fi
 for s in hexagonrpcd-adsp-rootpd hexagonrpcd-adsp-sensorspd; do
 	echo "hexagonrpcd_fw_dir=$Q" > /etc/conf.d/$s

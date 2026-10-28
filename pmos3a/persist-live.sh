@@ -145,6 +145,7 @@ chmod +x $W/etc/init.d/3a-hw
 chroot $W rc-update add 3a-hw default >/dev/null
 # apps: store (apk backend; installs live in RAM until added here), browser, terminal
 chroot $W apk info -e mobile-config-firefox >/dev/null || chroot $W apk add -q gnome-software gnome-software-plugin-apk firefox mobile-config-firefox gnome-console
+chroot $W apk info -e fastfetch >/dev/null || chroot $W apk add -q fastfetch
 # locally built binaries (build-phosh.sh, build-hexagonrpcd.sh), originals kept as .orig:
 # Phosh with a 42 px top bar (covers the camera hole), hexagonrpcd that drops DSP writes (sensors)
 for b in phosh-bar42:/usr/libexec/phosh hexagonrpcd-dropwrites:/usr/bin/hexagonrpcd; do

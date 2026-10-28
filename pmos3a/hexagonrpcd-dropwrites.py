@@ -112,7 +112,75 @@ static uint32_t apps_std_fseek(void *data,''', 1)
 s = re.sub(r'(\.impl = apps_std_fread,\n\t\},\n)\t\{ \.def = NULL, \.impl = NULL, \},\n',
            r'\1\t{\n\t\t.def = &apps_std_fwrite_def,\n\t\t.impl = apps_std_fwrite,\n\t},\n', s, count=1)
 
-for marker in ('apps_std_is_sink(*first_in)', 'Dropping writes', 'apps_std_fwrite_def', 'is_eof = 1'):
+# frename (33): the renamed file was a dropped write, so there is nothing to move
+s = s.replace('static uint32_t apps_std_fseek(void *data,', '''static uint32_t apps_std_frename(void *data,
+				 const struct fastrpc_io_buffer *inbufs,
+				 struct fastrpc_io_buffer *outbufs)
+{
+	fprintf(stderr, "Ignoring rename %s -> %s\\n",
+			(const char *) inbufs[1].p, (const char *) inbufs[2].p);
+	return 0;
+}
+
+static uint32_t apps_std_fseek(void *data,''', 1)
+s = re.sub(r'(\.impl = apps_std_stat,\n\t\},\n)',
+           r'\1\t{ .def = NULL, .impl = NULL, },\n\t{\n\t\t.def = &apps_std_frename_def,\n\t\t.impl = apps_std_frename,\n\t},\n',
+           s, count=1)
+
+s = s.replace('\t.n_procs = 32,', '\t.n_procs = sizeof(apps_std_procs) / sizeof(*apps_std_procs),', 1)
+
+for marker in ('apps_std_is_sink(*first_in)', 'Dropping writes', 'apps_std_fwrite_def', 'is_eof = 1',
+               'apps_std_frename_def', 'sizeof(apps_std_procs)'):
     assert marker in s, f'patch failed at: {marker}'
 open(c, 'w').write(s)
 print(f'patched {c} (+{len(s) - n} bytes)')
+
+d = f'{src}/hexagonrpcd/interfaces/apps_std.def'
+s = open(d).read()
+s = s.replace('HEXAGONRPC_DEFINE_REMOTE_METHOD(31, apps_std_stat, 1, 1, 24, 0)\n',
+              'HEXAGONRPC_DEFINE_REMOTE_METHOD(31, apps_std_stat, 1, 1, 24, 0)\n'
+              'HEXAGONRPC_DEFINE_REMOTE_METHOD(33, apps_std_frename, 1, 2, 0, 0)\n', 1)
+assert 'apps_std_frename' in s
+open(d, 'w').write(s)
+
+# methods >= 31 arrive as method 31 with the real number in the first input word
+# (Qualcomm's apps_std_skel.c); stat is 31 itself, frename 33
+f = f'{src}/hexagonrpcd/listener.c'
+s = open(f).read()
+s = s.replace('''	if (method >= ifaces[handle]->n_procs) {''', '''	if (method == 31 && REMOTE_SCALARS_INBUFS(sc) >= 1 && decoded[0].s >= 4)
+		method = *(const uint32_t *) decoded[0].p;
+
+	if (method >= ifaces[handle]->n_procs) {''', 1)
+assert 'decoded[0].s >= 4' in s
+# input buffers came in a fixed 256-byte array: the registry writes are bigger; take up to 64 KiB
+s = s.replace('\tchar inbufs[256];', '\tstatic char inbufs[65536];', 1)
+s = s.replace('&inbufs_len, 256, inbufs);', '&inbufs_len, sizeof(inbufs), inbufs);', 1)
+s = s.replace('\tif (inbufs_len > 256) {\n\t\tfprintf(stderr, "Large (>256B) input buffers aren\'t implemented\\n");',
+              '\tif (inbufs_len > sizeof(inbufs)) {\n\t\tfprintf(stderr, "Input buffers over %zu bytes aren\'t implemented\\n", sizeof(inbufs));', 1)
+assert 'static char inbufs[65536]' in s and 'sizeof(inbufs), inbufs' in s and 'inbufs_len > sizeof' in s
+open(f, 'w').write(s)
+
+# the 3a's SSC also reads persist/sensors/registry/{sns_reg_version,parsed_file_list.csv}
+f = f'{src}/hexagonrpcd/rpcd_builder.c'
+s = open(f).read()
+s = s.replace('\tpersist_dir = hfs_mkdir("persist", 1,', '''	char *sns_reg_version = malloc(n_prefix + sizeof("/sensors/sns_reg_version"));
+	char *sns_parsed = malloc(n_prefix + sizeof("/sensors/parsed_file_list.csv"));
+
+	if (sns_reg_version != NULL) {
+		strcpy(sns_reg_version, prefix);
+		strcat(sns_reg_version, "/sensors/sns_reg_version");
+	}
+
+	if (sns_parsed != NULL) {
+		strcpy(sns_parsed, prefix);
+		strcat(sns_parsed, "/sensors/parsed_file_list.csv");
+	}
+
+	persist_dir = hfs_mkdir("persist", 1,''', 1)
+s, k = re.subn(r'hfs_mkdir\("registry", 1,(\s*)hfs_map\("registry", sns_reg\)',
+               r'hfs_mkdir("registry", 3,\1hfs_map("registry", sns_reg),'
+               r'\1hfs_map("sns_reg_version", sns_reg_version),'
+               r'\1hfs_map("parsed_file_list.csv", sns_parsed)', s, count=1)
+assert k == 1 and 'sns_parsed = malloc' in s, 'rpcd_builder patch failed'
+open(f, 'w').write(s)
+print('patched listener.c, rpcd_builder.c, apps_std.def')
