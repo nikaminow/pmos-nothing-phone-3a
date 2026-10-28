@@ -24,6 +24,7 @@ for s in rmtfs tqftpserv; do chroot $W rc-update del $s default >/dev/null 2>&1 
 # sensors: 3a-sensors copies the DSP libs and sensor config (read-only) and starts hexagonrpcd
 chroot $W apk info -e hexagonrpcd-udev >/dev/null || chroot $W apk add -q hexagonrpcd hexagonrpcd-openrc hexagonrpcd-udev
 tr -d '\r' < $P/3a-sensors > $W/usr/local/bin/3a-sensors && chmod 755 $W/usr/local/bin/3a-sensors
+install -D -m 644 $P/81-3a-sensors.rules $W/usr/lib/udev/rules.d/81-3a-sensors.rules
 for s in hexagonrpcd-adsp-rootpd hexagonrpcd-adsp-sensorspd hexagonrpcd-sdsp; do chroot $W rc-update del $s default >/dev/null 2>&1 || true; done
 # live kernel log to the PC on the second USB serial port, as early as OpenRC allows
 tr -d '\r' < $P/3a-klog > $W/etc/init.d/3a-klog && chmod 755 $W/etc/init.d/3a-klog
