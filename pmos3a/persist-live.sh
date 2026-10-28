@@ -143,6 +143,16 @@ start() {
 EOF
 chmod +x $W/etc/init.d/3a-hw
 chroot $W rc-update add 3a-hw default >/dev/null
+# apps: store (apk backend; installs live in RAM until added here), browser, terminal
+chroot $W apk info -e mobile-config-firefox >/dev/null || chroot $W apk add -q gnome-software gnome-software-plugin-apk firefox mobile-config-firefox gnome-console
+# locally built binaries (build-phosh.sh, build-hexagonrpcd.sh), originals kept as .orig:
+# Phosh with a 42 px top bar (covers the camera hole), hexagonrpcd that drops DSP writes (sensors)
+for b in phosh-bar42:/usr/libexec/phosh hexagonrpcd-dropwrites:/usr/bin/hexagonrpcd; do
+	s=$P/out/${b%%:*}; d=$W${b#*:}
+	[ -f $s ] || continue
+	[ -f $d.orig ] || cp -a $d $d.orig
+	install -m 755 $s $d
+done
 # Phosh (postmarketos-ui-phosh): greetd + phrog instead of tinydm; panel DSI-2 at scale 3 (360x797)
 chroot $W rc-update del tinydm default >/dev/null 2>&1 || true
 chroot $W rc-update add greetd default >/dev/null

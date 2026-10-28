@@ -5,7 +5,8 @@
 set -e
 W=/root/rootfs3a
 B=/root/phosh-build
-V=$(chroot $W apk info -v phosh 2>/dev/null | sed -n 's/^phosh-\([0-9.]*\)-r.*/\1/p')
+V=$(chroot $W apk list -I phosh 2>/dev/null | sed -n 's/^phosh-\([0-9.]*\)-r.*/\1/p')
+[ -n "$V" ] || { echo "phosh version not found"; exit 1; }
 H=${PHOSH_BAR:-42}
 rm -rf $B && mkdir -p $B
 cp -a $W/. $B/
