@@ -45,7 +45,32 @@ ABL hangs on a 575 MB kernel and its ramdisk field did not deliver ours; shim (s
 points Linux at the initramfs embedded after the kernel, no copy.
 Next: read firmware from UFS (mount -o ro modem_a; never write), battery (ADSP), GPU, Wi-Fi.
 
-## STATE end of 2026-10-28 night (continue here)
+## STATE 2026-10-28 evening (continue here)
+Public repo: github.com/nikaminow/pmos-nothing-phone-3a (root = nura-3a, .gitignore whitelists pmos3a/ + this file;
+no blobs/ABL dump/binaries). Boot: Power+VolDown -> fastboot boot out/pmos-3a-boot.img -> send-rootfs.py.
+UI: **Phosh** (greetd + phrog), Plasma backup out/rootfs-plasma.tar.gz. Everything below is in 3a-hw / persist-live.sh.
+Works: display + **GPU** (Adreno 810, OpenGL ES 3.2, kmscube 120 fps; firmware gen80300_* from vendor_a in super
+via lp-map.py + dm-linear --readonly + erofs ro), **Wi-Fi** (ath11k, internet OK), **Bluetooth**, **modem**
+(LTE, MegaFon, mobile data via qmapmux0.0 with APN internet), battery, touch, CPU, cutout layout (gmobile).
+Key fixes / pitfalls (details in git log):
+- Display first bind always fails (ABL splash still scanning when SMMU attaches); 3a-hw unbinds/rebinds mdss.
+  The rebind needed: devcoredump disabled (devcd_del UAF), kernel patch pmos3a/kernel/0001 (msm never
+  cleaned DPU self-refresh work -> Oops) via build-msm.sh; GPU overlay (3a-gpu) only before the 2nd bind.
+  3a-splash-off.ko (INTF_1 0xae36000+0x6c) reads 0 -> no effect; real splash handover still open.
+- q6v5_pas + ath11k blacklisted for udev (no firmware yet at autoload); 3a-hw loads them in order.
+- WCN6755 RF powered by the wcn6750-pmu pwrseq (4a block + S1J rail on PMR735B gpio1, RF_CLK1, sleep clk
+  PMK8550 gpio5, BT uart11); 3a-wlan-pwr.ko holds the "wlan" target (else no TX with BT off); BD address
+  from SoC serial (hci0 stayed unconfigured); Wi-Fi calibration = modem_a qca6750/bdwlan.elf (board_id 0xff).
+- polkit: seatless session -> rule 50-3a-user.rules (netdev/plugdev).
+- Modem: EFS copied to RAM, rmtfs -o /var/lib/rmtfs -r (never writes UFS); IPA overlay 3a-modem; SIM
+  provisioning slot2 primary / slot1 secondary; ModemManager must be killed by pid (pkill -x misses it).
+- Debug: second USB serial port (COM MI_02) carries /dev/kmsg; run `python pmos3a/klog-pc.py` on the PC
+  -> out/klog.log. Hangs end in a Gunyah reboot to Android, which overwrites ramoops.
+Not done (higher risk / big): audio (3a has NXP TFA98xx amps @0x34/0x35 + WCD9378 codec, unlike 4a's
+AW88261; no mainline driver for WCD9378, TFA needs speaker-protection config -> risk to speakers),
+camera, sensors (ADSP SSC), haptics (rt6010). Easy next: Glyph LEDs (aw20036 @0x3a, mainline leds-aw200xx).
+
+## STATE end of 2026-10-28 night
 Working live and persisted in rootfs (pmos3a/persist-live.sh -> out/rootfs.tar.gz, service /etc/init.d/3a-hw):
 - real display: msm DPU + DSI + panel-raydium-rm69220 (BOE BF068MWM-TD0, from mainline), 120 Hz,
   overlay pmos3a/display/3a-display.dtbo applied by 3a-ovl.ko (build-display.sh). Panel wiring from
