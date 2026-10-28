@@ -2,7 +2,7 @@
 import base64, ctypes, msvcrt, subprocess, sys, time
 from ctypes import wintypes
 
-ps = "(Get-PnpDevice -PresentOnly -Class Ports | ? InstanceId -match 'VID_18D1').FriendlyName"
+ps = "(Get-PnpDevice -PresentOnly -Class Ports | ? { $_.InstanceId -match 'VID_18D1' -and $_.InstanceId -notmatch 'MI_02' } | Select -First 1).FriendlyName"
 name = subprocess.run(['powershell', '-NoProfile', '-Command', ps], capture_output=True, text=True).stdout
 port = name[name.find('(COM') + 1:name.find(')', name.find('(COM'))]
 f = open(r'\\.\%s' % port, 'r+b', buffering=0)

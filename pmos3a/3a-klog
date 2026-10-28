@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+# Kernel log to the PC over the second USB serial port (ttyGS1, COM port MI_02), read there by
+# pmos3a/klog-pc.py. Each /dev/kmsg reader gets every message, so syslog is unaffected; the PC
+# keeps the lines even when the phone hangs hard (ramoops is lost when Gunyah reboots to Android).
+description="kernel log to the PC over USB serial ttyGS1"
+command=/bin/sh
+command_args="-c 'stty -F /dev/ttyGS1 raw -echo clocal; exec cat /dev/kmsg > /dev/ttyGS1'"
+command_background=true
+pidfile=/run/3a-klog.pid
+
+depend() {
+	need devfs
+}

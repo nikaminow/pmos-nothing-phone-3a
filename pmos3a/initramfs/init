@@ -9,14 +9,19 @@ mount -t configfs configfs /sys/kernel/config
 echo "3a initramfs: waiting for the USB controller"
 for i in $(seq 30); do [ -n "$(ls /sys/class/udc 2>/dev/null)" ] && break; sleep 1; done
 G=/sys/kernel/config/usb_gadget/g1
-mkdir -p $G/strings/0x409 $G/configs/c.1/strings/0x409 $G/functions/acm.GS0
+mkdir -p $G/strings/0x409 $G/configs/c.1/strings/0x409 $G/functions/acm.GS0 $G/functions/acm.GS1
 echo 0x18d1 > $G/idVendor
 echo 0xd003 > $G/idProduct
-# CDC device class: Windows binds its inbox usbser.sys and shows a COM port, no driver to install
-echo 0x02 > $G/bDeviceClass
+# two CDC ACM functions with IADs (composite class EF/02/01): Windows binds its inbox usbser.sys
+# to each and shows two COM ports, no driver to install. GS0 (MI_00): rootfs + shell,
+# GS1 (MI_02): live kernel log (3a-klog service -> pmos3a/klog-pc.py), survives hard hangs
+echo 0xef > $G/bDeviceClass
+echo 0x02 > $G/bDeviceSubClass
+echo 0x01 > $G/bDeviceProtocol
 echo "Nothing Phone 3a" > $G/strings/0x409/product
 echo ACM > $G/configs/c.1/strings/0x409/configuration
 ln -s $G/functions/acm.GS0 $G/configs/c.1/
+ln -s $G/functions/acm.GS1 $G/configs/c.1/
 ls /sys/class/udc | head -1 > $G/UDC
 sleep 2
 # clocal: open() must not wait for DTR/carrier, the PC script never raises it

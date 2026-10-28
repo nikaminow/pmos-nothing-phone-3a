@@ -1,0 +1,46 @@
+From: nikaminow <345005485+nikaminow@users.noreply.github.com>
+Subject: [PATCH] drm/msm: cancel self-refresh work on kms uninit
+
+dpu_crtc_init() calls drm_self_refresh_helper_init() for every CRTC, but
+nothing ever calls drm_self_refresh_helper_cleanup(). After an unbind the
+delayed entry work can still run on the freed device:
+
+  Unable to handle kernel NULL pointer dereference at virtual address 0000000000000300
+  Workqueue: events drm_self_refresh_helper_entry_work
+  pc : drm_atomic_commit_alloc+0x18/0x98
+  lr : drm_self_refresh_helper_entry_work+0x64/0x1f8
+
+Seen on the Nothing Phone (3a) (milos), where the display is rebound once
+at boot. Cancel the work and free the helper data while the CRTCs still
+exist.
+
+---
+ drivers/gpu/drm/msm/msm_kms.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+--- a/drivers/gpu/drm/msm/msm_kms.c
++++ b/drivers/gpu/drm/msm/msm_kms.c
+@@ -12,6 +12,7 @@
+ 
+ #include <drm/drm_drv.h>
+ #include <drm/drm_mode_config.h>
++#include <drm/drm_self_refresh_helper.h>
+ #include <drm/drm_vblank.h>
+ #include <drm/clients/drm_client_setup.h>
+ 
+@@ -231,10 +232,15 @@
+ 	struct msm_drm_private *priv = platform_get_drvdata(pdev);
+ 	struct drm_device *ddev = priv->dev;
+ 	struct msm_kms *kms = priv->kms;
++	struct drm_crtc *crtc;
+ 	int i;
+ 
+ 	BUG_ON(!kms);
+ 
++	/* DPU arms self-refresh entry work per CRTC: cancel it before the CRTCs go away */
++	drm_for_each_crtc(crtc, ddev)
++		drm_self_refresh_helper_cleanup(crtc);
++
+ 	/* We must cancel and cleanup any pending vblank enable/disable
+ 	 * work before msm_irq_uninstall() to avoid work re-enabling an
+ 	 * irq after uninstall has disabled it.

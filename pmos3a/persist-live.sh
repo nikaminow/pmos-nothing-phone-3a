@@ -15,6 +15,9 @@ cp $P/display/3a-display.dtbo $P/display/3a-gpu.dtbo $P/display/3a-wifi.dtbo $W/
 chroot $W depmod $KV
 install -D -m 755 /mnt/c/Users/qu33rl1nk/nura-3a/upstream-4a/tools/pil-squash.py $W/usr/local/bin/pil-squash.py
 install -D -m 755 $P/lp-map.py $W/usr/local/bin/lp-map.py
+# live kernel log to the PC on the second USB serial port, as early as OpenRC allows
+tr -d '\r' < $P/3a-klog > $W/etc/init.d/3a-klog && chmod 755 $W/etc/init.d/3a-klog
+chroot $W rc-update add 3a-klog sysinit >/dev/null
 # polkit: Plasma may run in a seatless session, so network/modem rights come from the groups;
 # polkitd is D-Bus activated, the OpenRC service only loses the bus name and shows "failed"
 install -D -m 644 $P/50-3a-user.rules $W/etc/polkit-1/rules.d/50-3a-user.rules
