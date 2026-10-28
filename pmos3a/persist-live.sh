@@ -10,7 +10,7 @@ sed -i -e /KWIN_DRM_NO_AMS/d -e /QT_SCALE_FACTOR/d -e /LIBGL_ALWAYS_SOFTWARE/d -
 	$W/etc/environment $W/etc/profile.d/soft-gl.sh
 # display: panel driver + overlay module + overlay
 mkdir -p $W/lib/modules/$KV/extra
-cp $P/display/panel-raydium-rm69220.ko $P/display/3a-ovl.ko $P/display/3a-ovl-gpu.ko $P/display/3a-ovl-wifi.ko $P/display/3a-wlan-pwr.ko $W/lib/modules/$KV/extra/
+cp $P/display/panel-raydium-rm69220.ko $P/display/3a-ovl.ko $P/display/3a-ovl-gpu.ko $P/display/3a-ovl-wifi.ko $P/display/3a-wlan-pwr.ko $P/display/3a-splash-off.ko $W/lib/modules/$KV/extra/
 cp $P/display/3a-display.dtbo $P/display/3a-gpu.dtbo $P/display/3a-wifi.dtbo $W/lib/firmware/
 chroot $W depmod $KV
 install -D -m 755 /mnt/c/Users/qu33rl1nk/nura-3a/upstream-4a/tools/pil-squash.py $W/usr/local/bin/pil-squash.py
@@ -52,19 +52,26 @@ start() {
 		# the failed first bind leaves an msm display snapshot (devcoredump); freed 5 min later it
 		# points into the unbound DRM device: NULL deref in devcd_del -> msm_disp_state_free
 		echo 1 > /sys/class/devcoredump/disabled
+		# with MDP still scanning ABL's splash the first bind fails (SMMU faults, mdp_clk_src
+		# stuck, DSI cmd -110): stop the splash first, then one bind with the GPU included
+		modprobe 3a-splash-off
+		S=$(cat /sys/module/3a_splash_off/parameters/stopped 2>/dev/null)
+		[ "$S" = Y ] && [ -f /lib/firmware/qcom/gen80300_sqe.fw ] && modprobe 3a-ovl-gpu
+		N=$(dmesg | grep -c 'Failed to initialize panel')
 		modprobe dispcc_milos
 		modprobe msm
 		modprobe panel-raydium-rm69220
 		modprobe 3a-ovl
-		sleep 2
-		# the first bind fails: MDP still scans ABL's splash when the SMMU attaches (faults,
-		# mdp_clk_src stuck, DSI cmd -110, white/black screen); a second bind starts clean
-		# GPU joins only the second bind: unbinding a bound Adreno trips msm_gem and the rebind fails
-		echo ae00000.display-subsystem > /sys/bus/platform/drivers/msm-mdss/unbind
-		[ -f /lib/firmware/qcom/gen80300_sqe.fw ] && modprobe 3a-ovl-gpu
-		sleep 1
-		echo ae00000.display-subsystem > /sys/bus/platform/drivers/msm-mdss/bind
-		sleep 2
+		sleep 3
+		if [ "$(dmesg | grep -c 'Failed to initialize panel')" != "$N" ]; then
+			# fallback: a second bind starts clean. The GPU joins only then: unbinding a bound
+			# Adreno trips msm_gem (and the rebind leaves use-after-free work in msm)
+			echo ae00000.display-subsystem > /sys/bus/platform/drivers/msm-mdss/unbind
+			[ "$S" = Y ] || { [ -f /lib/firmware/qcom/gen80300_sqe.fw ] && modprobe 3a-ovl-gpu; }
+			sleep 1
+			echo ae00000.display-subsystem > /sys/bus/platform/drivers/msm-mdss/bind
+			sleep 2
+		fi
 	}
 	# no GPU bound (no firmware, nodisplay): Plasma must render in software
 	sed -i -e /LIBGL_ALWAYS_SOFTWARE/d -e /QT_QUICK_BACKEND/d -e /KWIN_COMPOSE/d /etc/environment /etc/profile.d/soft-gl.sh
