@@ -1,0 +1,37 @@
+#!/bin/sh
+# Nothing Phone (3a) sensors (ADSP SSC): gather what hexagonrpcd serves to the sensors PD from the
+# phone's own partitions, READ-ONLY (block devices set ro, ext4 without journal replay, copies in RAM),
+# then start hexagonrpcd and restart iio-sensor-proxy (libssc). Run in the background by 3a-hw.
+Q=/usr/share/qcom/milos/Nothing/asteroids
+part() { for b in /sys/class/block/sd*; do grep -q "^PARTNAME=$1$" $b/uevent && basename $b; done; }
+rofs() {	# rofs PARTNAME MOUNTPOINT [extra mount args]
+	d=$(part $1); [ -n "$d" ] || return 1
+	blockdev --setro /dev/$d
+	mkdir -p $2
+	mount -o ro,noload /dev/$d $2 2>/dev/null || mount -o ro /dev/$d $2
+}
+if [ ! -d $Q/dsp ]; then
+	mkdir -p $Q/sensors
+	rofs dsp_a /mnt/dsp && cp -r /mnt/dsp $Q/dsp && umount /mnt/dsp
+	rofs persist /mnt/persist && cp -r /mnt/persist/sensors/registry/registry $Q/sensors/registry 2>/dev/null; umount /mnt/persist 2>/dev/null
+	# vendor_a lives in super (logical partition): dm-linear --readonly, erofs ro
+	S=$(part super)
+	blockdev --setro /dev/$S
+	python3 /usr/local/bin/lp-map.py /dev/$S vendor_a |
+		awk -v d=/dev/$S '{print s/512, $2/512, "linear", d, $1/512; s+=$2}' > /tmp/vendor.table
+	dmsetup create --readonly vendor_s /tmp/vendor.table
+	mkdir -p /mnt/vendor_s
+	mount -t erofs -o ro /dev/mapper/vendor_s /mnt/vendor_s
+	cp -r /mnt/vendor_s/etc/sensors/config $Q/sensors/config
+	cp /mnt/vendor_s/etc/sensors/sns_reg_config $Q/sensors/sns_reg.conf 2>/dev/null
+	umount /mnt/vendor_s
+	dmsetup remove vendor_s
+	ln -sfn /sys/devices/soc0 $Q/socinfo
+	chown -R fastrpc:fastrpc $Q 2>/dev/null
+fi
+for s in hexagonrpcd-adsp-rootpd hexagonrpcd-adsp-sensorspd; do
+	echo "hexagonrpcd_fw_dir=$Q" > /etc/conf.d/$s
+	rc-service $s start
+done
+sleep 5
+rc-service iio-sensor-proxy restart
