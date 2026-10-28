@@ -1,0 +1,35 @@
+#!/bin/sh
+# Nothing Phone (3a) modem bring-up, run in the background by 3a-hw (takes about a minute).
+# EFS (modemst1/2, fsg, fsc) is copied from UFS into RAM and rmtfs serves the copies with -r:
+# nothing is ever written to the phone's storage.
+R=/var/lib/rmtfs
+mkdir -p $R
+part() { for b in /sys/class/block/sd*; do grep -q "^PARTNAME=$1$" $b/uevent && basename $b; done; }
+for p in modemst1:modem_fs1 modemst2:modem_fs2 fsg:modem_fsg fsc:modem_fsc; do
+	[ -f $R/${p##*:} ] || cat /dev/$(part ${p%%:*}) > $R/${p##*:}
+done
+mkdir -p /var/lib/tqftpserv
+rc-service rmtfs start
+rc-service tqftpserv start
+# IPA (data path) before the modem, else "unexpected init_completed response"
+modprobe 3a-ovl-modem
+modprobe ipa
+for r in /sys/class/remoteproc/*; do
+	[ "$(cat $r/name)" = modem ] && echo start > $r/state
+done
+# the UIM service appears once the modem has booted
+for i in $(seq 1 90); do qmicli --silent -d qrtr://0 --uim-noop >/dev/null 2>&1 && break; sleep 1; done
+sleep 5
+# dual SIM: ModemManager uses slot 2, but the modem only sets up a primary session when told
+# to; without it MM reports "sim-missing". Slot 2 -> primary, slot 1 -> secondary (as in Nura).
+aid() { qmicli -d qrtr://0 --uim-get-card-status 2>/dev/null | grep -A9 -E "^Slot \[$1\]" |
+	grep -A1 'Application ID' | sed -n 2p | tr -d '[:space:]'; }
+A2=$(aid 2); A1=$(aid 1)
+[ -n "$A2" ] && qmicli -d qrtr://0 -p --uim-change-provisioning-session="slot=2,activate=yes,session-type=primary-gw-provisioning,aid=$A2" >/dev/null 2>&1
+[ -n "$A1" ] && qmicli -d qrtr://0 -p --uim-change-provisioning-session="slot=1,activate=yes,session-type=secondary-gw-provisioning,aid=$A1" >/dev/null 2>&1
+sleep 3
+# ModemManager started before the modem existed: restart it for real (pkill -x misses it)
+rc-service modemmanager stop >/dev/null 2>&1
+kill $(pgrep -f /usr/sbin/ModemManager) 2>/dev/null
+sleep 2
+rc-service modemmanager start >/dev/null 2>&1

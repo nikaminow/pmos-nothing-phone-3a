@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Nothing Phone (3a) modem data path: IPA, applied at runtime by 3a-ovl-modem.ko.
+ * As on the Phone (4a) in Nura's DTS; ipa_fws.mbn comes from modem_a (pil-squash, read-only).
+ */
+/dts-v1/;
+/plugin/;
+
+&ipa {
+	firmware-name = "qcom/milos/nothing/asteroids/ipa_fws.mbn";
+	memory-region = <&ipa_fw_mem>;
+	qcom,gsi-loader = "self";
+	status = "okay";
+};

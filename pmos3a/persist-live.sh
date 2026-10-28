@@ -15,6 +15,12 @@ cp $P/display/3a-display.dtbo $P/display/3a-gpu.dtbo $P/display/3a-wifi.dtbo $W/
 chroot $W depmod $KV
 install -D -m 755 /mnt/c/Users/qu33rl1nk/nura-3a/upstream-4a/tools/pil-squash.py $W/usr/local/bin/pil-squash.py
 install -D -m 755 $P/lp-map.py $W/usr/local/bin/lp-map.py
+# modem: 3a-hw starts it (3a-modem) after copying EFS to RAM; rmtfs serves only those copies
+tr -d '\r' < $P/3a-modem > $W/usr/local/bin/3a-modem && chmod 755 $W/usr/local/bin/3a-modem
+cp $P/display/3a-ovl-modem.ko $W/lib/modules/$KV/extra/ && chroot $W depmod $KV
+cp $P/display/3a-modem.dtbo $W/lib/firmware/
+printf 'command_args="-o /var/lib/rmtfs -r"\n' > $W/etc/conf.d/rmtfs
+for s in rmtfs tqftpserv; do chroot $W rc-update del $s default >/dev/null 2>&1 || true; done
 # live kernel log to the PC on the second USB serial port, as early as OpenRC allows
 tr -d '\r' < $P/3a-klog > $W/etc/init.d/3a-klog && chmod 755 $W/etc/init.d/3a-klog
 chroot $W rc-update add 3a-klog sysinit >/dev/null
@@ -93,6 +99,8 @@ start() {
 		# Wi-Fi calibration: board_id is 0xff (unprogrammed), Android's default bdwlan.elf fits
 		mkdir -p /lib/firmware/ath11k/WCN6750/hw1.0
 		cp /mnt/modem/image/qca6750/bdwlan.elf /lib/firmware/ath11k/WCN6750/hw1.0/board.bin
+		# modem configuration (MCFG), fetched by the modem over tqftp
+		cp -r /mnt/modem/image/modem_pr $F/
 		umount /mnt/modem
 	fi
 	# Bluetooth firmware (msbtfw12.mbn, msnv12.bin) from bluetooth_a, READ-ONLY
@@ -121,6 +129,8 @@ start() {
 	A=$(printf '%08x' $(cat /sys/devices/soc0/serial_number) | sed 's/\(..\)\(..\)\(..\)\(..\)/\1:\2:\3:\4/')
 	btmgmt --index 0 public-addr 22:3a:$A >/dev/null 2>&1
 	modprobe ath11k_ahb
+	# modem + SIM + mobile data, in the background (about a minute)
+	start-stop-daemon -b -S -x /usr/local/bin/3a-modem
 	eend 0
 }
 EOF
