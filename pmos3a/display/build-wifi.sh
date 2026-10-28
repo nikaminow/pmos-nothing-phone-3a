@@ -1,13 +1,10 @@
 #!/bin/bash
-# Wi-Fi overlay + WCN6750 firmware (Alpine linux-firmware-ath11k) as one tarball to push.
+# Wi-Fi + Bluetooth overlay (3a-wifi.dtbo, loaded by 3a-ovl-wifi.ko). Firmware comes from the
+# phone at boot (3a-hw): WPSS + bdwlan from modem_a, BT from bluetooth_a.
 set -e
+L=/root/pmos3a/linux
 D=/mnt/c/Users/qu33rl1nk/nura-3a/pmos3a/display
-dtc -q -@ -I dts -O dtb -o $D/3a-wifi.dtbo $D/3a-wifi.dts
-cd /tmp && rm -rf fwath && mkdir fwath && cd fwath
-U=https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64
-V=$(wget -qO- $U/ | grep -o 'linux-firmware-ath11k-[0-9a-z._-]*\.apk' | head -1)
-wget -qO a.apk $U/$V
-tar -xzf a.apk 2>/dev/null || true
-ls lib/firmware/ath11k
-tar -czf $D/ath11k-wcn6750.tgz lib/firmware/ath11k/WCN6750
-ls -l $D/3a-wifi.dtbo $D/ath11k-wcn6750.tgz
+cpp -nostdinc -I $L/include -I $L/arch/arm64/boot/dts/qcom -undef -D__DTS__ -x assembler-with-cpp \
+	$D/3a-wifi.dts -o /tmp/3a-wifi.pp.dts
+dtc -q -@ -I dts -O dtb -o $D/3a-wifi.dtbo /tmp/3a-wifi.pp.dts
+ls -l $D/3a-wifi.dtbo
