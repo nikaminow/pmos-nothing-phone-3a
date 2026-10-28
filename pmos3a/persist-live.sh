@@ -49,6 +49,9 @@ start() {
 	fi
 	# 3a.nodisplay on the kernel command line: keep simplefb, load the display by hand
 	grep -q 3a.nodisplay /proc/cmdline || {
+		# the failed first bind leaves an msm display snapshot (devcoredump); freed 5 min later it
+		# points into the unbound DRM device: NULL deref in devcd_del -> msm_disp_state_free
+		echo 1 > /sys/class/devcoredump/disabled
 		modprobe dispcc_milos
 		modprobe msm
 		modprobe panel-raydium-rm69220
