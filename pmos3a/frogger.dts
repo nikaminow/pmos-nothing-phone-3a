@@ -1,0 +1,583 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Nothing Phone (4a) "frogger": based on the Phone (3a) devicetree.
+ */
+/dts-v1/;
+
+#include "milos-nothing-asteroids.dts"
+
+/ {
+	model = "Nothing Phone (4a)";
+	compatible = "nothing,frogger", "qcom,milos";
+
+	/* bootloader does not fill this in when we are kexec-ed */
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x80e00000 0x0 0xa00000
+		0x0 0x81cf5000 0x0 0xa000
+		0x0 0x82320000 0x0 0x180000
+		0x0 0xeea00000 0x0 0x11600000
+		0x8 0x80000000 0x0 0x2f8fe000
+		0x8 0xb0000000 0x0 0x7700000
+		0x9 0x80000000 0x1 0x80000000
+		0x8 0xbf800000 0x0 0xc0800000
+		0x0 0x82800000 0x0 0x8400000
+		0x0 0x9ea9c000 0x0 0x64000
+		0x0 0x9f300000 0x0 0x7100000
+		0x0 0xa7000000 0x0 0x39600000
+		0x0 0xe0a00000 0x0 0x7f00000>;
+	};
+};
+
+&tlmm {
+	gpio-reserved-ranges = <13 1>, <27 4>, <63 2>;
+};
+
+&ufs_mem_hc {
+	reset-gpios = <&tlmm 167 GPIO_ACTIVE_LOW>;
+
+	vcc-supply = <&vreg_l12b>;
+	vcc-max-microamp = <800000>;
+	vccq-supply = <&vreg_l5f>;
+	vccq-max-microamp = <750000>;
+
+	status = "okay";
+};
+
+&ufs_mem_phy {
+	vdda-phy-supply = <&vreg_l2b>;
+	vdda-pll-supply = <&vreg_l4b>;
+
+	status = "okay";
+};
+
+&{/chosen/framebuffer@e3940000} {
+	reg = <0x0 0xe3940000 0x0 0xcb4000>;
+	width = <1224>;
+	height = <2720>;
+	stride = <4896>;
+};
+
+&remoteproc_adsp {
+	firmware-name = "qcom/milos/nothing/frogger/adsp.mbn",
+			"qcom/milos/nothing/frogger/adsp_dtb.mbn";
+};
+
+&remoteproc_cdsp {
+	firmware-name = "qcom/milos/nothing/frogger/cdsp.mbn",
+			"qcom/milos/nothing/frogger/cdsp_dtb.mbn";
+};
+
+&remoteproc_mpss {
+	firmware-name = "qcom/milos/nothing/frogger/modem.mbn";
+};
+
+&remoteproc_wpss {
+	firmware-name = "qcom/milos/nothing/frogger/wpss.mbn";
+};
+
+&ipa {
+	firmware-name = "qcom/milos/nothing/frogger/ipa_fws.mbn";
+	memory-region = <&ipa_fw_mem>;
+
+	qcom,gsi-loader = "self";
+
+	status = "okay";
+};
+
+/ {
+	/*
+	 * Nothing binds to this, so fw_devlink never calls sync_state() on the
+	 * power domain / interconnect providers. That keeps the votes the
+	 * bootloader made for the display scanout alive (simple-framebuffer
+	 * only holds clocks) until a real display driver takes over.
+	 */
+	nura-hold {
+		compatible = "nura,hold";
+		power-domains = <&rpmhpd RPMHPD_CX>, <&rpmhpd RPMHPD_MX>;
+		interconnects = <&mmss_noc MASTER_MDP QCOM_ICC_TAG_ALWAYS
+				 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
+	};
+};
+
+&tlmm {
+	ts_active_state: ts-active-state {
+		pins = "gpio19", "gpio20";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+};
+
+&spi0 {
+	status = "okay";
+
+	touchscreen@0 {
+		compatible = "focaltech,ft3683g-spi";
+		reg = <0>;
+		spi-max-frequency = <12000000>;
+
+		interrupts-extended = <&tlmm 19 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 20 GPIO_ACTIVE_LOW>;
+
+		vci-supply = <&vreg_l22b>;
+		vddio-supply = <&vreg_l11b>;
+
+		pinctrl-0 = <&ts_active_state>;
+		pinctrl-names = "default";
+
+		touchscreen-size-x = <1224>;
+		touchscreen-size-y = <2720>;
+	};
+};
+
+/* Display: NT37706A (VXN) DSI video panel, DSC */
+&tlmm {
+	disp_reset_n_active: disp-reset-n-active-state {
+		pins = "gpio12";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	disp_reset_n_suspend: disp-reset-n-suspend-state {
+		pins = "gpio12";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	mdp_vsync: mdp-vsync-state {
+		pins = "gpio129";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+};
+
+/ {
+	vddic_1p8_panel: regulator-vddic-1p8-panel {
+		compatible = "regulator-fixed";
+		regulator-name = "vddic_1v8_t0";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&tlmm 109 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+	};
+};
+
+&mdss {
+	/* enabled at runtime by the nura-display overlay: an early enable makes Linux
+	 * detach the bootloader scanout from the SMMU and the screen goes black */
+	status = "disabled";
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&vreg_l4b>;
+
+	status = "okay";
+
+	panel@0 {
+		compatible = "nothing,frogger-nt37706a-vxn";
+		reg = <0>;
+
+		reset-gpios = <&tlmm 12 GPIO_ACTIVE_LOW>;
+
+		vddio-supply = <&vreg_l9b>;
+		vddic-supply = <&vddic_1p8_panel>;
+		vci-supply = <&vreg_l19b>;
+
+		pinctrl-0 = <&disp_reset_n_active>, <&mdp_vsync>;
+		pinctrl-1 = <&disp_reset_n_suspend>, <&mdp_vsync>;
+		pinctrl-names = "default", "sleep";
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	data-lanes = <0 1 2 3>;
+	remote-endpoint = <&panel_in>;
+};
+
+&mdss_dsi0_phy {
+	vdds-supply = <&vreg_l2b>;
+
+	status = "okay";
+};
+
+&dispcc {
+	status = "disabled";
+};
+
+/* GPU: Adreno 810 */
+&gpu {
+	status = "okay";
+};
+
+&gpu_zap_shader {
+	firmware-name = "qcom/milos/nothing/frogger/gen80300_zap.mbn";
+};
+
+/* ---- WCN6750 Wi-Fi / Bluetooth (same wiring as stock: bt-reset gpio53, uart11) ---- */
+/ {
+	vreg_s1j: regulator-pm3001a-s1j {
+		compatible = "regulator-fixed";
+		regulator-name = "pm3001a_s1j";
+		regulator-min-microvolt = <2200000>;
+		regulator-max-microvolt = <2200000>;
+		startup-delay-us = <1000>;
+
+		gpio = <&pmr735b_gpios 1 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		pinctrl-0 = <&s1j_enable_default>;
+		pinctrl-names = "default";
+	};
+
+	wcn6750-pmu {
+		compatible = "qcom,wcn6755-pmu", "qcom,wcn6750-pmu";
+
+		vddaon-supply = <&vreg_s3b>;
+		vddasd-supply = <&vreg_l7b>;
+		vddpmu-supply = <&vreg_s3b>;
+		vddrfa0p8-supply = <&vreg_s3b>;
+		vddrfa1p2-supply = <&vreg_s2b>;
+		vddrfa1p7-supply = <&vreg_s1b>;
+		vddrfa2p2-supply = <&vreg_s1j>;
+
+		bt-enable-gpios = <&tlmm 53 GPIO_ACTIVE_HIGH>;
+
+		clocks = <&rpmhcc RPMH_RF_CLK1>;
+
+		pinctrl-0 = <&bluetooth_enable_default>, <&pmk8550_sleep_clk_default>;
+		pinctrl-names = "default";
+
+		regulators {
+			vreg_pmu_rfa_cmn: ldo0 {
+				regulator-name = "vreg_pmu_rfa_cmn";
+			};
+
+			vreg_pmu_aon_0p59: ldo1 {
+				regulator-name = "vreg_pmu_aon_0p59";
+			};
+
+			vreg_pmu_wlcx_0p8: ldo2 {
+				regulator-name = "vreg_pmu_wlcx_0p8";
+			};
+
+			vreg_pmu_wlmx_0p85: ldo3 {
+				regulator-name = "vreg_pmu_wlmx_0p85";
+			};
+
+			vreg_pmu_btcmx_0p85: ldo4 {
+				regulator-name = "vreg_pmu_btcmx_0p85";
+			};
+
+			vreg_pmu_rfa_0p8: ldo5 {
+				regulator-name = "vreg_pmu_rfa_0p8";
+			};
+
+			vreg_pmu_rfa_1p2: ldo6 {
+				regulator-name = "vreg_pmu_rfa_1p2";
+			};
+
+			vreg_pmu_rfa_1p7: ldo7 {
+				regulator-name = "vreg_pmu_rfa_1p7";
+			};
+
+			vreg_pmu_pcie_0p9: ldo8 {
+				regulator-name = "vreg_pmu_pcie_0p9";
+			};
+
+			vreg_pmu_pcie_1p8: ldo9 {
+				regulator-name = "vreg_pmu_pcie_1p8";
+			};
+		};
+	};
+};
+
+&pmk8550_gpios {
+	pmk8550_sleep_clk_default: sleep-clk-default-state {
+		pins = "gpio5";
+		function = "func1";
+		input-disable;
+		output-enable;
+		bias-disable;
+		power-source = <0>;
+	};
+};
+
+&pmr735b_gpios {
+	s1j_enable_default: s1j-enable-default-state {
+		pins = "gpio1";
+		function = PMIC_GPIO_FUNC_NORMAL;
+		power-source = <0>;
+		bias-disable;
+		output-low;
+	};
+};
+
+&tlmm {
+	bluetooth_enable_default: bluetooth-enable-default-state {
+		pins = "gpio53";
+		function = "gpio";
+		output-low;
+		bias-disable;
+	};
+
+	qup_uart11_sleep_cts: qup-uart11-sleep-cts-state {
+		pins = "gpio48";
+		function = "gpio";
+		bias-bus-hold;
+	};
+
+	qup_uart11_sleep_rts: qup-uart11-sleep-rts-state {
+		pins = "gpio49";
+		function = "gpio";
+		bias-pull-down;
+	};
+
+	qup_uart11_sleep_tx: qup-uart11-sleep-tx-state {
+		pins = "gpio50";
+		function = "gpio";
+		bias-pull-up;
+	};
+
+	qup_uart11_sleep_rx: qup-uart11-sleep-rx-state {
+		pins = "gpio51";
+		function = "gpio";
+		bias-pull-up;
+	};
+};
+
+&uart11 {
+	/delete-property/ interrupts;
+	interrupts-extended = <&intc GIC_SPI 586 IRQ_TYPE_LEVEL_HIGH 0>,
+			      <&tlmm 51 IRQ_TYPE_EDGE_FALLING>;
+
+	pinctrl-1 = <&qup_uart11_sleep_cts>,
+		    <&qup_uart11_sleep_rts>,
+		    <&qup_uart11_sleep_tx>,
+		    <&qup_uart11_sleep_rx>;
+	pinctrl-names = "default", "sleep";
+
+	status = "okay";
+
+	bluetooth {
+		compatible = "qcom,wcn6755-bt", "qcom,wcn6750-bt";
+
+		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
+		vddaon-supply = <&vreg_pmu_aon_0p59>;
+		vddbtcmx-supply = <&vreg_pmu_btcmx_0p85>;
+		vddrfa0p8-supply = <&vreg_pmu_rfa_0p8>;
+		vddrfa1p7-supply = <&vreg_pmu_rfa_1p7>;
+		vddrfa1p2-supply = <&vreg_pmu_rfa_1p2>;
+	};
+};
+
+&wifi {
+	qcom,calibration-variant = "Nothing_Phone_4a";
+
+	status = "okay";
+};
+
+/* ---- Audio: 2x Awinic smart amps (earpiece + speaker) on i2c13, primary MI2S ---- */
+&tlmm {
+	qup_i2c13_data_clk: qup-i2c13-data-clk-state {
+		/* SDA, SCL */
+		pins = "gpio59", "gpio60";
+		function = "qup1_se6";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+
+	i2s0_active: i2s0-active-state {
+		sck-pins {
+			pins = "gpio15";
+			function = "i2s0_sck";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+		};
+		data0-pins {
+			pins = "gpio16";
+			function = "i2s0_data0";
+			drive-strength = <8>;
+			bias-disable;
+		};
+		data1-pins {
+			pins = "gpio17";
+			function = "i2s0_data1";
+			drive-strength = <8>;
+			bias-disable;
+		};
+		ws-pins {
+			pins = "gpio18";
+			function = "i2s0_ws";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
+
+	i2s0_sleep: i2s0-sleep-state {
+		pins = "gpio15", "gpio16", "gpio17", "gpio18";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	aw_reset_default: aw-reset-default-state {
+		pins = "gpio141", "gpio142";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
+	};
+};
+
+&qupv3_id_1 {
+	i2c13: i2c@898000 {
+		compatible = "qcom,geni-i2c";
+		reg = <0x0 0x00898000 0x0 0x4000>;
+
+		interrupts = <GIC_SPI 461 IRQ_TYPE_LEVEL_HIGH 0>;
+
+		clocks = <&gcc GCC_QUPV3_WRAP1_S6_CLK>;
+		clock-names = "se";
+
+		interconnects = <&clk_virt MASTER_QUP_CORE_1 QCOM_ICC_TAG_ALWAYS
+				 &clk_virt SLAVE_QUP_CORE_1 QCOM_ICC_TAG_ALWAYS>,
+				<&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
+				 &cnoc_cfg SLAVE_QUP_1 QCOM_ICC_TAG_ACTIVE_ONLY>,
+				<&aggre1_noc MASTER_QUP_1 QCOM_ICC_TAG_ALWAYS
+				 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
+		interconnect-names = "qup-core",
+				     "qup-config",
+				     "qup-memory";
+
+		dmas = <&gpi_dma1 0 6 QCOM_GPI_I2C>,
+		       <&gpi_dma1 1 6 QCOM_GPI_I2C>;
+		dma-names = "tx",
+			    "rx";
+
+		pinctrl-0 = <&qup_i2c13_data_clk>, <&aw_reset_default>;
+		pinctrl-names = "default";
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		status = "okay";
+
+		/* earpiece (receiver) + top speaker */
+		aw88261_l: audio-codec@34 {
+			compatible = "awinic,aw88261";
+			reg = <0x34>;
+
+			dvdd-supply = <&vreg_aw_dvdd>;
+			sound-name-prefix = "Amplifier L";
+			firmware-name = "qcom/milos/nothing/frogger/aw88261_acf.bin";
+
+			awinic,audio-channel = <0>;
+			awinic,sync-flag;
+
+			#sound-dai-cells = <0>;
+		};
+
+		/* bottom speaker */
+		aw88261_r: audio-codec@35 {
+			compatible = "awinic,aw88261";
+			reg = <0x35>;
+
+			dvdd-supply = <&vreg_aw_dvdd>;
+			sound-name-prefix = "Amplifier R";
+			firmware-name = "qcom/milos/nothing/frogger/aw88261_acf.bin";
+
+			awinic,audio-channel = <1>;
+			awinic,sync-flag;
+
+			#sound-dai-cells = <0>;
+		};
+	};
+};
+
+/ {
+	vreg_aw_dvdd: regulator-aw-dvdd {
+		compatible = "regulator-fixed";
+		regulator-name = "aw_dvdd";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	sound {
+		compatible = "qcom,milos-sndcard";
+		model = "Nothing-Phone-4a";
+
+		/* same PRM request Android's AGM makes: primary MI2S bit clock, 48 kHz x 2 x 32 bit */
+		clocks = <&q6prmcc LPASS_CLK_ID_PRI_MI2S_IBIT LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
+		clock-names = "pri-mi2s-ibit";
+		assigned-clocks = <&q6prmcc LPASS_CLK_ID_PRI_MI2S_IBIT LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
+		assigned-clock-rates = <3072000>;
+
+		pinctrl-0 = <&i2s0_active>;
+		pinctrl-1 = <&i2s0_sleep>;
+		pinctrl-names = "default",
+				"sleep";
+
+		rx-dma-test-dai-link {
+			link-name = "RX Codec DMA test";
+
+			codec {
+				sound-dai = <&lpass_rxmacro 0>;
+			};
+
+			cpu {
+				sound-dai = <&q6apmbedai RX_CODEC_DMA_RX_0>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
+
+		primary-mi2s-capture-dai-link {
+			link-name = "Primary MI2S Capture";
+
+			codec {
+				sound-dai = <&aw88261_l>, <&aw88261_r>;
+			};
+
+			cpu {
+				sound-dai = <&q6apmbedai PRIMARY_MI2S_TX>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
+
+		primary-mi2s-dai-link {
+			link-name = "Primary MI2S Playback";
+
+			codec {
+				sound-dai = <&aw88261_l>, <&aw88261_r>;
+			};
+
+			cpu {
+				sound-dai = <&q6apmbedai PRIMARY_MI2S_RX>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
+	};
+};

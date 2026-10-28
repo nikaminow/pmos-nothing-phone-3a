@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/* Nothing Phone (3a) Wi-Fi (WCN6750 via WPSS), applied at runtime by 3a-ovl.ko name=3a-wifi.dtbo */
+/dts-v1/;
+/plugin/;
+
+&wifi {
+	status = "okay";
+};

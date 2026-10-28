@@ -1,0 +1,43 @@
+#!/bin/busybox sh
+# 3a RAM initramfs: USB NCM network to the PC (172.16.42.1) + telnet shell.
+/bin/busybox --install -s /bin
+mkdir -p /proc /sys /dev /sys/kernel/config /tmp
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs dev /dev
+mount -t configfs configfs /sys/kernel/config
+echo "3a initramfs: waiting for the USB controller"
+for i in $(seq 30); do [ -n "$(ls /sys/class/udc 2>/dev/null)" ] && break; sleep 1; done
+G=/sys/kernel/config/usb_gadget/g1
+mkdir -p $G/strings/0x409 $G/configs/c.1/strings/0x409 $G/functions/acm.GS0
+echo 0x18d1 > $G/idVendor
+echo 0xd003 > $G/idProduct
+# CDC device class: Windows binds its inbox usbser.sys and shows a COM port, no driver to install
+echo 0x02 > $G/bDeviceClass
+echo "Nothing Phone 3a" > $G/strings/0x409/product
+echo ACM > $G/configs/c.1/strings/0x409/configuration
+ln -s $G/functions/acm.GS0 $G/configs/c.1/
+ls /sys/class/udc | head -1 > $G/UDC
+sleep 2
+# clocal: open() must not wait for DTR/carrier, the PC script never raises it
+stty -F /dev/ttyGS0 raw -echo clocal
+# rootfs from the PC (pmos3a/send-rootfs.py): "SIZE\n" then the tar.gz on the COM port
+mkdir -p /newroot
+mount -t tmpfs -o size=6G tmpfs /newroot
+echo "UDC: $(cat $G/UDC)  waiting for rootfs on the USB COM port..."
+# one open for the whole transfer: closing ttyGS0 between the size and the data loses bytes;
+# and termios resets on the last close, so set raw mode on this open fd, not with stty -F before
+exec 3< /dev/ttyGS0
+stty raw -echo -ixon -ixoff -icrnl -inlcr -istrip clocal <&3
+read -r SZ <&3
+echo "receiving $SZ bytes"
+head -c "$SZ" <&3 > /newroot/r.tgz
+echo "got $(stat -c %s /newroot/r.tgz) of $SZ bytes, md5 $(md5sum /newroot/r.tgz | cut -c1-12)"
+tar -xzf /newroot/r.tgz -C /newroot && rm /newroot/r.tgz && [ -x /newroot/sbin/init ] && {
+	echo "rootfs received, starting it"
+	umount /sys/kernel/config 2>/dev/null
+	mount --move /dev /newroot/dev; mount --move /proc /newroot/proc; mount --move /sys /newroot/sys
+	exec switch_root /newroot /sbin/init
+}
+echo "rootfs failed"
+exec sh

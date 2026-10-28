@@ -1,0 +1,21 @@
+# Only the postmarketOS port for the Phone (3a) is published; the rest of this folder is other work.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/PMOS-3A-PLAN.md
+!/pmos3a/
+
+# build output, logs, binaries
+/pmos3a/out/
+*.log
+*.ko
+*.dtbo
+__pycache__/
+
+# vendor blobs and dumps from the phone: never published
+/pmos3a/abl.dtb
+/pmos3a/abl.dts
+*.tgz
+*.mbn
+*.fw

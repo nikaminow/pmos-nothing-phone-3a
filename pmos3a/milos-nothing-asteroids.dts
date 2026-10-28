@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/dts-v1/;
+
+#include "milos.dtsi"
+
+/ {
+	model = "Nothing Phone (3a)";
+	compatible = "nothing,asteroids", "qcom,milos";
+	chassis-type = "handset";
+
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		bootargs = "console=tty0 ignore_loglevel clk_ignore_unused pd_ignore_unused";
+
+		framebuffer@e3940000 {
+			compatible = "simple-framebuffer";
+			reg = <0x0 0xe3940000 0x0 0x2b00000>;
+			width = <1080>;
+			height = <2392>;
+			stride = <(1080 * 4)>;
+			format = "a8r8g8b8";
+		};
+	};
+
+	/* Only the 4 GiB bank that probe v2 found free of firmware carve-outs. */
+	memory@900000000 {
+		device_type = "memory";
+		reg = <0x9 0x00000000 0x1 0x00000000>;
+	};
+
+	reserved-memory {
+		splash@e3940000 {
+			reg = <0x0 0xe3940000 0x0 0x2b00000>;
+			no-map;
+		};
+	};
+};

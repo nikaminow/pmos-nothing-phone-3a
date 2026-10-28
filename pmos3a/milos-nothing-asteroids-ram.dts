@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Nothing Phone (3a), booted from RAM by pmos3a/shim.S (fastboot boot, nothing flashed).
+ * The upstream board DTS plus what the shim's setup needs:
+ * - ABL's DTB is replaced, so memory is ours: only the 4 GiB bank probe v2 found
+ *   free of firmware carve-outs;
+ * - the initramfs is copied by the shim to 0x9_1000_0000 (end patched by make-boot);
+ * - USB role normally comes from pmic-glink (ADSP firmware, not loaded): force device mode.
+ */
+#include "milos-nothing-asteroids.dts"
+
+/ {
+	memory@900000000 {
+		device_type = "memory";
+		reg = <0x9 0x00000000 0x1 0x00000000>;
+	};
+
+	chosen {
+		bootargs = "console=tty0 ignore_loglevel clk_ignore_unused pd_ignore_unused arm-smmu.disable_bypass=0 panic=0 regulator_ignore_unused rdinit=/init";
+		linux,initrd-start = <0x9 0x10000000>;
+		linux,initrd-end = <0x9 0x10000000>;
+		/* shimc.c copies ABL's own DTB here: read it at /proc/device-tree/chosen/abl-dtb */
+		abl-dtb = /incbin/("abl-placeholder.bin");
+	};
+};
+
+/*
+ * UFS as on the Phone (4a) (Nura): only to read firmware (mount -o ro modem_a).
+ * Nothing may ever be written to it: the user's Android data lives there.
+ */
+&ufs_mem_hc {
+	reset-gpios = <&tlmm 167 GPIO_ACTIVE_LOW>;
+	vcc-supply = <&vreg_l12b>;
+	vcc-max-microamp = <800000>;
+	vccq-supply = <&vreg_l5f>;
+	vccq-max-microamp = <750000>;
+	status = "okay";
+};
+
+&ufs_mem_phy {
+	vdda-phy-supply = <&vreg_l2b>;
+	vdda-pll-supply = <&vreg_l4b>;
+	status = "okay";
+};
+
+/* Touch: as on the Phone (4a) (Nura), SE0 is GSI-only so spi-geni needs gpi_dma0. */
+&gpi_dma0 {
+	status = "okay";
+};
+
+&qupv3_id_0 {
+	status = "okay";
+};
+
+&tlmm {
+	ts_active_state: ts-active-state {
+		pins = "gpio19", "gpio20";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
+};
+
+&spi0 {
+	status = "okay";
+
+	touchscreen@0 {
+		compatible = "focaltech,ft3683g-spi";
+		reg = <0>;
+		spi-max-frequency = <12000000>;
+		interrupts-extended = <&tlmm 19 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 20 GPIO_ACTIVE_LOW>;
+		vci-supply = <&vreg_l22b>;
+		vddio-supply = <&vreg_l11b>;
+		pinctrl-0 = <&ts_active_state>;
+		pinctrl-names = "default";
+		touchscreen-size-x = <1080>;
+		touchscreen-size-y = <2392>;
+	};
+};
+
+&usb_1 {
+	dr_mode = "peripheral";
+	/delete-property/ usb-role-switch;
+	/* Windows fails to start the device (code 10) after enumeration: no USB2 LPM/suspend */
+	maximum-speed = "high-speed";
+	snps,usb2-gadget-lpm-disable;
+	snps,dis_u2_susphy_quirk;
+	snps,dis_enblslpm_quirk;
+};

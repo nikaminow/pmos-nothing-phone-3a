@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Nothing Phone (3a) GPU: Adreno 810, applied at runtime by 3a-ovl-gpu.ko.
+ * Firmware gen80300_{sqe.fw,gmu.bin,zap.mbn} from the phone's vendor partition (read-only)
+ * in /lib/firmware/qcom/.
+ */
+/dts-v1/;
+/plugin/;
+
+&gpu {
+	status = "okay";
+};
+
+&gpu_zap_shader {
+	firmware-name = "qcom/gen80300_zap.mbn";
+};

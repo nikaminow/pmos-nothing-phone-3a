@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Nothing Phone (3a) display, applied at runtime by 3a-ovl.ko (base DTB built with -@).
+ * Panel: BOE BF068MWM-TD0 (Raydium RM69220), from ABL's DTB:
+ *   msm_drm.dsi_display0=qcom,mdss_dsi_rm69220_fhd_plus_120hz_vid_boe, reset gpio12,
+ *   vddio = pm7550 L9 1.8 V, vddic_1v8_t0 = fixed regulator on gpio109, vci = pm7550 L19 3.0 V.
+ * Same wiring as the Phone (4a) in Nura's DTS (vdda L4B, vdds L2B, vsync gpio129).
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+&{/} {
+	vddic_1p8_panel: regulator-vddic-1p8-panel {
+		compatible = "regulator-fixed";
+		regulator-name = "vddic_1v8_t0";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		gpio = <&tlmm 109 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-boot-on;
+	};
+};
+
+&tlmm {
+	disp_reset_n_active: disp-reset-n-active-state {
+		pins = "gpio12";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	mdp_vsync: mdp-vsync-state {
+		pins = "gpio129";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+};
+
+&mdss_dsi0 {
+	vdda-supply = <&vreg_l4b>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	panel@0 {
+		compatible = "boe,bf068mwm-td0", "raydium,rm69220";
+		reg = <0>;
+		reset-gpios = <&tlmm 12 GPIO_ACTIVE_LOW>;
+		vddio-supply = <&vreg_l9b>;
+		dvdd-supply = <&vddic_1p8_panel>;
+		vci-supply = <&vreg_l19b>;
+		pinctrl-0 = <&disp_reset_n_active>, <&mdp_vsync>;
+		pinctrl-names = "default";
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&mdss_dsi0_out>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	data-lanes = <0 1 2 3>;
+	remote-endpoint = <&panel_in>;
+};
+
+&mdss_dsi0_phy {
+	vdds-supply = <&vreg_l2b>;
+	status = "okay";
+};
+
+&mdss {
+	status = "okay";
+};
+
+&dispcc {
+	status = "okay";
+};
+
+/* GPU: separate overlay 3a-gpu.dts, applied by 3a-hw between the failed first bind and the rebind */
