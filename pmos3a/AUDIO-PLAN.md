@@ -17,6 +17,17 @@ until protection is loaded and visible in the amp's registers, and hard volume c
   Protection + profiles come from the container tfa98xx.cnt (vendor firmware), calibration from
   persist; both copied read-only.
 
+## Stage A result (2026-10-29, read-only)
+- Both amps answer on i2c@898000 (bus 2 on the phone) without touching their resets.
+- REV (0x03) = 0x0b73 -> **TFA9873, revision B**; SYS_CTRL0 (0x00) = 0x4201, PWDN set (off).
+- TFA9873 has **no DSP**: excursion/thermal speaker protection runs on the Qualcomm ADSP, in
+  Nothing's AudioReach module from vendor `lib/rfsa/adsp/libtfadsp_rx.so` (+ `libtfadsp_tx.so`
+  for IV feedback). The chip itself only has hardware thermal foldback / over-current shutdown.
+  Container: vendor `firmware/tfa98xx.cnt`.
+- So real protection needs the TFA DSP module in our topology (module ID, params and calibration
+  from Nothing's ACDB / tfa98xx.cnt) - the hard part of stage B/C. Until then any test stays at
+  very low gain with the chip's own limits only.
+
 ## Stages
 A. **No sound, no risk.** Enable i2c@898000 without any amp driver; release reset and only READ
    the revision register (amps power up in PWDN; no I2S clock = no sound possible). Copy
