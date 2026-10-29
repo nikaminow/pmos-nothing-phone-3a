@@ -175,5 +175,9 @@ if [ -f $P/nothing,asteroids.json ]; then
 fi
 # KWin output scale 3.1 (kwinoutputconfig.json from the phone, if pulled)
 [ -f $P/kwinoutputconfig.json ] && { mkdir -p $W/home/user/.config; cp $P/kwinoutputconfig.json $W/home/user/.config/; chown -R 10000:10000 $W/home/user/.config; }
-(cd $W && tar -czf $P/out/rootfs.tar.gz .)
-ls -l $P/out/rootfs.tar.gz
+# squashfs (zlib: fast to decompress on the phone), mounted read-only + tmpfs overlay by the initramfs
+rm -f $P/out/rootfs.sqfs.tmp
+mksquashfs $W $P/out/rootfs.sqfs.tmp -comp gzip -b 256K -noappend -quiet -no-progress -wildcards \
+	-e 'proc/*' 'sys/*' 'dev/*' 'run/*' 'tmp/*'
+mv -f $P/out/rootfs.sqfs.tmp $P/out/rootfs.sqfs
+ls -l $P/out/rootfs.sqfs

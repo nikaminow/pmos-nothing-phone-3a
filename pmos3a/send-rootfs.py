@@ -1,7 +1,10 @@
 """Send out/rootfs.tar.gz (or the given tarball) to the 3a initramfs over its USB serial port
 (CDC ACM, VID 18d1 PID d003): send-rootfs.py [rootfs.tar.gz]"""
 import os, subprocess, sys
-p = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out', 'rootfs.tar.gz')
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out')
+# default: the squashfs rootfs (initramfs mounts it + overlay), else the old tar.gz
+p = sys.argv[1] if len(sys.argv) > 1 else next(
+    (os.path.join(out, f) for f in ('rootfs.sqfs', 'rootfs.tar.gz') if os.path.exists(os.path.join(out, f))))
 ps = "(Get-PnpDevice -PresentOnly -Class Ports | ? { $_.InstanceId -match 'VID_18D1&PID_D003' -and $_.InstanceId -notmatch 'MI_02' } | Select -First 1).FriendlyName"
 name = subprocess.run(['powershell', '-NoProfile', '-Command', ps], capture_output=True, text=True).stdout
 port = name[name.find('(COM') + 1:name.find(')', name.find('(COM'))] if '(COM' in name else None

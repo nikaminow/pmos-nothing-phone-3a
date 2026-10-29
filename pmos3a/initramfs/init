@@ -27,8 +27,8 @@ sleep 2
 # clocal: open() must not wait for DTR/carrier, the PC script never raises it
 stty -F /dev/ttyGS0 raw -echo clocal
 # rootfs from the PC (pmos3a/send-rootfs.py): "SIZE\n" then the tar.gz on the COM port
-mkdir -p /newroot
-mount -t tmpfs -o size=6G tmpfs /newroot
+mkdir -p /newroot /ram
+mount -t tmpfs -o size=6G tmpfs /ram
 echo "UDC: $(cat $G/UDC)  waiting for rootfs on the USB COM port..."
 # one open for the whole transfer: closing ttyGS0 between the size and the data loses bytes;
 # and termios resets on the last close, so set raw mode on this open fd, not with stty -F before
@@ -36,9 +36,24 @@ exec 3< /dev/ttyGS0
 stty raw -echo -ixon -ixoff -icrnl -inlcr -istrip clocal <&3
 read -r SZ <&3
 echo "receiving $SZ bytes"
-head -c "$SZ" <&3 > /newroot/r.tgz
-echo "got $(stat -c %s /newroot/r.tgz) of $SZ bytes, md5 $(md5sum /newroot/r.tgz | cut -c1-12)"
-tar -xzf /newroot/r.tgz -C /newroot && rm /newroot/r.tgz && [ -x /newroot/sbin/init ] && {
+head -c "$SZ" <&3 > /ram/rootfs
+echo "got $(stat -c %s /ram/rootfs) of $SZ bytes, md5 $(md5sum /ram/rootfs | cut -c1-12)"
+if [ "$(head -c 4 /ram/rootfs)" = hsqs ]; then
+	# squashfs (send-rootfs.py out/rootfs.sqfs): stays compressed in RAM, writes go to a tmpfs
+	# overlay; about 1 GB less RAM than unpacking, and no unpack time
+	insmod /lib/squashfs.ko
+	insmod /lib/overlay.ko
+	mkdir -p /ram/ro /ram/upper /ram/work
+	mount -t squashfs -o loop,ro /ram/rootfs /ram/ro &&
+		mount -t overlay overlay -o lowerdir=/ram/ro,upperdir=/ram/upper,workdir=/ram/work /newroot &&
+		mkdir -p /newroot/mnt/ram && mount --move /ram /newroot/mnt/ram
+else
+	# tar.gz (old format)
+	mount -t tmpfs -o size=6G tmpfs /newroot
+	tar -xzf /ram/rootfs -C /newroot
+	umount /ram
+fi
+[ -x /newroot/sbin/init ] && {
 	echo "rootfs received, starting it"
 	umount /sys/kernel/config 2>/dev/null
 	mount --move /dev /newroot/dev; mount --move /proc /newroot/proc; mount --move /sys /newroot/sys

@@ -11,6 +11,13 @@ if [ ! -f /root/busybox.static ]; then
 fi
 cp /root/busybox.static $R/bin/busybox
 tr -d '\r' < $P/initramfs/init > $R/init
+# modules the init needs to mount a squashfs rootfs (busybox insmod: uncompressed)
+mkdir -p $R/lib
+M=$(ls -d /root/rootfs3a/lib/modules/*/kernel/fs | head -1)
+for m in squashfs/squashfs overlayfs/overlay; do
+	if [ -f $M/$m.ko.zst ]; then zstd -qdcf $M/$m.ko.zst > $R/lib/$(basename $m).ko; else cp $M/$m.ko $R/lib/; fi
+	echo "$(basename $m): depends=$(modinfo -F depends $R/lib/$(basename $m).ko)"
+done
 chmod +x $R/init $R/bin/busybox
 (cd $R && find . | cpio -o -H newc 2>/dev/null | gzip -9) > $P/out/initramfs.cpio.gz
 SZ=$(stat -c %s $P/out/initramfs.cpio.gz)
