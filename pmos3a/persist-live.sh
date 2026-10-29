@@ -152,7 +152,14 @@ EOF
 chmod +x $W/etc/init.d/3a-hw
 chroot $W rc-update add 3a-hw default >/dev/null
 # apps: store (apk backend; installs live in RAM until added here), browser, terminal
-chroot $W apk info -e mobile-config-firefox >/dev/null || chroot $W apk add -q gnome-software gnome-software-plugin-apk firefox mobile-config-firefox gnome-console
+chroot $W apk info -e mobile-config-firefox >/dev/null || chroot $W apk --timeout 60 add -q firefox mobile-config-firefox
+if chroot $W apk info -e postmarketos-ui-phosh >/dev/null; then
+	chroot $W apk info -e gnome-software >/dev/null || chroot $W apk --timeout 60 add -q gnome-software gnome-software-plugin-apk gnome-console
+else
+	# Plasma's own store and terminal instead of the GNOME ones (they pull in GTK4/libadwaita)
+	chroot $W apk info -e discover >/dev/null || chroot $W apk --timeout 60 add -q discover discover-backend-apk qmlkonsole
+	chroot $W apk --timeout 60 del -q gnome-software gnome-software-plugin-apk gnome-console 2>/dev/null || true
+fi
 chroot $W apk info -e fastfetch >/dev/null || chroot $W apk add -q fastfetch
 # speaker amps stage A (AUDIO-PLAN.md): i2cget for read-only probing; the bus overlay is loaded by hand only
 chroot $W apk info -e i2c-tools >/dev/null || chroot $W apk add -q i2c-tools
@@ -160,28 +167,32 @@ chroot $W apk info -e i2c-tools >/dev/null || chroot $W apk add -q i2c-tools
 # Phosh with a 42 px top bar (covers the camera hole), hexagonrpcd that drops DSP writes (sensors)
 for b in phosh-bar42:/usr/libexec/phosh hexagonrpcd-dropwrites:/usr/bin/hexagonrpcd; do
 	s=$P/out/${b%%:*}; d=$W${b#*:}
-	[ -f $s ] || continue
+	[ -f $s ] && [ -f $d ] || continue
 	[ -f $d.orig ] || cp -a $d $d.orig
 	install -m 755 $s $d
 done
-# Phosh (postmarketos-ui-phosh): greetd + phrog instead of tinydm; panel DSI-2 at scale 3 (360x797)
-chroot $W rc-update del tinydm default >/dev/null 2>&1 || true
-chroot $W rc-update add greetd default >/dev/null
-mkdir -p $W/etc/phosh
-[ -f $W/etc/phosh/phoc.ini ] || cp $W/usr/share/phosh/phoc.ini $W/etc/phosh/phoc.ini
-for f in $W/etc/phosh/phoc.ini $W/usr/share/phrog/phoc.ini; do
-	grep -q 'output:DSI-2' $f || printf '\n[output:DSI-2]\nscale = 3\n' >> $f
-done
-# display cutout + rounded corners for Phosh (gmobile looks up <dt compatible>.json); the camera hole
-# from Android's product overlay FrameworksResCommon_Sys_Asteroids (circle at 540,68.6 r 21.5)
-if [ -f $P/nothing,asteroids.json ]; then
+sed -i /G_RESOURCE_OVERLAYS/d $W/etc/environment $W/etc/profile.d/soft-gl.sh
+if chroot $W apk info -e postmarketos-ui-phosh >/dev/null; then
+	# Phosh: greetd + phrog instead of tinydm; panel DSI-2 at scale 3 (360x797)
+	chroot $W rc-update del tinydm default >/dev/null 2>&1 || true
+	chroot $W rc-update add greetd default >/dev/null
+	mkdir -p $W/etc/phosh
+	[ -f $W/etc/phosh/phoc.ini ] || cp $W/usr/share/phosh/phoc.ini $W/etc/phosh/phoc.ini
+	for f in $W/etc/phosh/phoc.ini $W/usr/share/phrog/phoc.ini; do
+		grep -q 'output:DSI-2' $f || printf '\n[output:DSI-2]\nscale = 3\n' >> $f
+	done
+	# display cutout + rounded corners (gmobile looks up <dt compatible>.json); the camera hole
+	# from Android's product overlay FrameworksResCommon_Sys_Asteroids (circle at 540,68.6 r 21.5)
 	install -D -m 644 $P/nothing,asteroids.json $W/usr/share/gmobile/display-panels/nothing,asteroids.json
 	rm -rf $W/etc/gmobile $W/etc/xdg/gmobile
 	# gmobile reads panels only from its built-in GResource: overlay that path with the directory
 	O='G_RESOURCE_OVERLAYS=/mobi/phosh/gmobile/devices/display-panels=/usr/share/gmobile/display-panels'
-	sed -i /G_RESOURCE_OVERLAYS/d $W/etc/environment $W/etc/profile.d/soft-gl.sh
 	echo "$O" >> $W/etc/environment
 	echo "export $O" >> $W/etc/profile.d/soft-gl.sh
+else
+	# Plasma Mobile: tinydm autologin, KWin (night light and double-tap wake are KWin's own)
+	chroot $W rc-update del greetd default >/dev/null 2>&1 || true
+	chroot $W rc-update add tinydm default >/dev/null
 fi
 # KWin output scale 3.1 (kwinoutputconfig.json from the phone, if pulled)
 [ -f $P/kwinoutputconfig.json ] && { mkdir -p $W/home/user/.config; cp $P/kwinoutputconfig.json $W/home/user/.config/; chown -R 10000:10000 $W/home/user/.config; }
