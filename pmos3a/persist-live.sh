@@ -11,8 +11,8 @@ sed -i -e /KWIN_DRM_NO_AMS/d -e /QT_SCALE_FACTOR/d -e /LIBGL_ALWAYS_SOFTWARE/d -
 # display: panel driver + overlay module + overlay
 mkdir -p $W/lib/modules/$KV/extra
 cp $P/display/panel-raydium-rm69220.ko $P/display/3a-ovl.ko $P/display/3a-ovl-gpu.ko $P/display/3a-ovl-wifi.ko $P/display/3a-wlan-pwr.ko $P/display/3a-splash-off.ko \
-	$P/display/3a-ovl-haptics.ko $P/display/rt6010-haptics.ko $W/lib/modules/$KV/extra/
-cp $P/display/3a-haptics.dtbo $W/lib/firmware/
+	$P/display/3a-ovl-haptics.ko $P/display/rt6010-haptics.ko $P/display/3a-ovl-audio-i2c.ko $W/lib/modules/$KV/extra/
+cp $P/display/3a-haptics.dtbo $P/display/3a-audio-i2c.dtbo $W/lib/firmware/
 install -D -m 644 $P/72-3a-haptics.rules $W/usr/lib/udev/rules.d/72-3a-haptics.rules
 cp $P/display/3a-display.dtbo $P/display/3a-gpu.dtbo $P/display/3a-wifi.dtbo $W/lib/firmware/
 chroot $W depmod $KV
@@ -154,6 +154,8 @@ chroot $W rc-update add 3a-hw default >/dev/null
 # apps: store (apk backend; installs live in RAM until added here), browser, terminal
 chroot $W apk info -e mobile-config-firefox >/dev/null || chroot $W apk add -q gnome-software gnome-software-plugin-apk firefox mobile-config-firefox gnome-console
 chroot $W apk info -e fastfetch >/dev/null || chroot $W apk add -q fastfetch
+# speaker amps stage A (AUDIO-PLAN.md): i2cget for read-only probing; the bus overlay is loaded by hand only
+chroot $W apk info -e i2c-tools >/dev/null || chroot $W apk add -q i2c-tools
 # locally built binaries (build-phosh.sh, build-hexagonrpcd.sh), originals kept as .orig:
 # Phosh with a 42 px top bar (covers the camera hole), hexagonrpcd that drops DSP writes (sensors)
 for b in phosh-bar42:/usr/libexec/phosh hexagonrpcd-dropwrites:/usr/bin/hexagonrpcd; do
