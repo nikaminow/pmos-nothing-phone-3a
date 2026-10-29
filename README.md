@@ -12,7 +12,7 @@
 
 **English** · [Русский](README.ru.md)
 
-[**Download**](../../releases/latest) · [Try it](#-try-it-no-flashing) · [Status](#-status) · [Build](#-building) · [Dev log](PMOS-3A-PLAN.md)
+[**⬇ Download**](../../releases/latest) · [Try it](#-try-it-no-flashing) · [Status](#-status) · [Known issues](#-known-issues) · [Roadmap](#-roadmap) · [Build](#-building) · [Dev log](PMOS-3A-PLAN.md)
 
 </div>
 
@@ -21,26 +21,30 @@
 > intact. Reboot the phone and you are back in Android.
 
 Based on [Nura](https://github.com/UnderWeek/nura-nothing-phone-4a) for the Phone (4a) "Frogger" (same SoC),
-kernel [milos-mainline](https://github.com/milos-mainline/linux) 7.2 with the Nura patch.
+kernel [milos-mainline](https://github.com/milos-mainline/linux) 7.2 with the Nura patch and our own patches.
 
 ## ✅ Status
 
 | | Component | Notes |
 |:-:|---|---|
-| ✅ | Plasma Mobile (or Phosh), touch | focaltech ft3683g on spi0 |
+| ✅ | Plasma Mobile, touch | status bar fitted around the camera hole, scale 2.7 |
 | ✅ | Display, 120 Hz | msm DPU + DSI + panel-raydium-rm69220 (BOE BF068MWM-TD0) |
-| ✅ | GPU (Adreno 810) | hardware OpenGL, firmware read from `vendor_a` |
-| ✅ | Wi-Fi, Bluetooth | WCN6755 (ath11k + hci_uart) |
-| ✅ | Modem: calls, SMS, data | ModemManager over QRTR; EFS copied to RAM, served read-only |
+| ✅ | GPU (Adreno 810) | hardware OpenGL ES 3.2 (Mesa freedreno), firmware read from `vendor_a` |
+| ✅ | All 7.4 GiB of RAM | memory map taken from the bootloader |
+| ✅ | Wi-Fi, Bluetooth, hotspot | WCN6755 (ath11k + hci_uart) |
+| ✅ | Modem: calls, SMS, mobile data | ModemManager over QRTR; EFS copied to RAM, served read-only |
 | ✅ | Battery level | ADSP + `qcom_battmgr` |
 | ✅ | Sensors: auto-rotate, light, proximity, compass | SSC on the ADSP via hexagonrpcd + iio-sensor-proxy |
-| ✅ | Vibration | RT6010, own driver |
+| ✅ | Vibration | RT6010, own driver (strength: `rt6010_haptics.max_gain`) |
 | ✅ | Glyph lights, flashlight | aw200xx |
+| ✅ | Double-tap to wake | |
 | ✅ | Clock | set from the PC at boot |
-| 🚧 | Speakers | protection runs on the ADSP, see [AUDIO-PLAN.md](pmos3a/AUDIO-PLAN.md) |
+| 🚧 | Night light | kernel fix for the gamma LUT channel order, being tested |
+| 🚧 | Speakers | amp driver and sound card work; speaker protection on the ADSP in progress ([AUDIO-PLAN.md](pmos3a/AUDIO-PLAN.md)) |
 | 🚧 | Cameras | CAMSS port, see [CAMERA-PLAN.md](pmos3a/CAMERA-PLAN.md) |
 | ❌ | Microphones, headset | WCD9378 has no mainline driver |
-| ❌ | SIM slot 2 (some cards), USB host / video out | |
+| ❌ | Suspend | disabled until resume works; the screen still turns off |
+| ❌ | USB host / video out | |
 
 Tested on the Phone (3a) only, not the (3a) Pro.
 
@@ -81,6 +85,24 @@ all changes live in RAM, nothing persists between boots.
 
 </details>
 
+## ⚠️ Known issues
+
+- Swipe up and hold does not open the task switcher yet.
+- Volume and notification popups open over the camera hole.
+- No suspend: battery drains faster than on Android while the screen is off.
+- Changes (Wi-Fi networks, apps, settings) are lost on reboot: everything lives in RAM.
+
+## 🗺 Roadmap
+
+- [x] Display, GPU, touch, Plasma Mobile
+- [x] Wi-Fi, Bluetooth, modem, sensors, vibration, Glyph
+- [x] Full RAM, correct clock, auto-rotate, double-tap wake
+- [ ] Speakers with speaker protection (stage C of [AUDIO-PLAN.md](pmos3a/AUDIO-PLAN.md))
+- [ ] Night light (fix being tested)
+- [ ] Cameras ([CAMERA-PLAN.md](pmos3a/CAMERA-PLAN.md))
+- [ ] Suspend / resume
+- [ ] Installable image (flashable, keeps Android on the other slot)
+
 ## ⚙️ How it boots
 
 ```
@@ -105,9 +127,10 @@ Kernel sources: milos-mainline 7.2 + the Nura patch + [`pmos3a/kernel/*.patch`](
 |---|---|
 | 1. Kernel, modules | `build-kernel.sh`, `build-modules.sh`, `build-extra-modules.sh`, `build-msm.sh` |
 | 2. DTB, overlays, small drivers | `build-dtb.sh`, `display/build-*.sh` |
-| 3. hexagonrpcd with fixes | `build-hexagonrpcd.sh` |
-| 4. rootfs | `build-rootfs.sh` once, then `persist-live.sh` → `out/rootfs.sqfs` |
-| 5. initramfs → boot image | `build-initramfs.sh`, then `make-boot.ps1` (patches initrd end into the DTB) |
+| 3. Audio | `audio/build-tfa98xx.sh` (amp driver), `audio/build-topology.sh` (AudioReach topology) |
+| 4. hexagonrpcd with fixes | `build-hexagonrpcd.sh` |
+| 5. rootfs | `build-rootfs.sh` once, then `persist-live.sh` → `out/rootfs.sqfs` |
+| 6. initramfs → boot image | `build-initramfs.sh`, then `make-boot.ps1` (patches initrd end into the DTB) |
 
 All scripts are in [`pmos3a/`](pmos3a). Debug over USB serial: `phone-run.py`, `phone-shell.py`,
 `phone-push.py`, `phone-pull.py`; `klog-pc.py` records the live kernel log from the second port.
@@ -117,4 +140,12 @@ All scripts are in [`pmos3a/`](pmos3a). Debug over USB serial: `phone-run.py`, `
 > [!WARNING]
 > Only `fastboot boot`. Never `fastboot flash`, never write to UFS: the scripts mount phone partitions
 > read-only and mark `super` read-only before mapping it. The speakers stay off until their
-> protection works: driving them without it can damage them.
+> protection works: the amp driver refuses to power them up (`allow_start=0`).
+
+## 🙏 Credits
+
+[Nura](https://github.com/UnderWeek/nura-nothing-phone-4a) (Phone (4a) port) ·
+[milos-mainline](https://github.com/milos-mainline/linux) ·
+[postmarketOS](https://postmarketos.org) · [KDE Plasma Mobile](https://plasma-mobile.org) ·
+[linux-msm](https://github.com/linux-msm) (hexagonrpc, audioreach-topology) ·
+NXP/Goodix tfa98xx and Nothing's kernel sources (GPL).
