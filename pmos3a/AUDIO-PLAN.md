@@ -12,8 +12,11 @@ until protection is loaded and visible in the amp's registers, and hard volume c
   amps, with IV feedback back over Primary MI2S TX. Nura's machine driver "qcom,milos-sndcard"
   is in our kernel; its AudioReach topology source is upstream-4a/audio/Nothing-Phone-4a.m4.
 - WCD9378 codec (headset, mics, earpiece?) has no mainline driver: out of scope.
-- Driver: NXP tfa98xx (GPL) is not in Nothing's sm7635 kernel repo, but in other Nothing trees,
-  newest in NothingOSS/android_kernel_device_modules_6.1_nothing_mt6878 (sound/soc/codecs/tfa98xx).
+- Driver: NXP tfa98xx (GPL) is in Nothing's sm7635 kernel repo after all, under
+  vendor/qcom/opensource/audio-kernel/asoc/codecs/tfa98xx (with TFA9873 B0 support; the mt6878
+  tree's copy lacks the 9873). Built there with TFA_NON_DSP_SOLUTION: the driver only sets up the
+  chip from the container; protection parameters reach the ADSP from userspace (misc device ->
+  send_tfa_cal_apr, which on AudioReach platforms is a stub). Ported copy: pmos3a/audio/tfa98xx.
   Protection + profiles come from the container tfa98xx.cnt (vendor firmware), calibration from
   persist; both copied read-only.
 

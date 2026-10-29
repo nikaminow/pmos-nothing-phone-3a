@@ -10,6 +10,7 @@
 
 #include <dt-bindings/clock/qcom,milos-gcc.h>
 #include <dt-bindings/dma/qcom-gpi.h>
+#include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interconnect/qcom,icc.h>
 #include <dt-bindings/interconnect/qcom,milos-rpmh.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
@@ -66,5 +67,22 @@
 		#size-cells = <0>;
 
 		status = "okay";
+
+		/*
+		 * Stage B: the two TFA9873 as in the vendor DT (no irq line, reset pulse active
+		 * high). The ported snd-soc-tfa98xx.ko is not in the module tree, so nothing binds
+		 * them until it is insmod'ed by hand; with allow_start=0 it never powers them up.
+		 */
+		amp@34 {
+			compatible = "tfa,tfa98xx";
+			reg = <0x34>;
+			reset-gpios = <&tlmm 141 GPIO_ACTIVE_HIGH>;
+		};
+
+		amp@35 {
+			compatible = "tfa,tfa98xx";
+			reg = <0x35>;
+			reset-gpios = <&tlmm 142 GPIO_ACTIVE_HIGH>;
+		};
 	};
 };

@@ -8,6 +8,9 @@ KV=$(ls $W/lib/modules | head -1)
 # 3a-hw puts the software-rendering variables back when the GPU did not come up (plasmashell crashes then)
 sed -i -e /KWIN_DRM_NO_AMS/d -e /QT_SCALE_FACTOR/d -e /LIBGL_ALWAYS_SOFTWARE/d -e /QT_QUICK_BACKEND/d -e /KWIN_COMPOSE/d \
 	$W/etc/environment $W/etc/profile.d/soft-gl.sh
+# KWin: no direct scanout or overlay planes on msm DPU (app launches flickered)
+sed -i -e /KWIN_DRM_NO_DIRECT_SCANOUT/d -e /KWIN_USE_OVERLAYS/d $W/etc/environment
+printf 'KWIN_DRM_NO_DIRECT_SCANOUT=1\nKWIN_USE_OVERLAYS=0\n' >> $W/etc/environment
 # display: panel driver + overlay module + overlay
 mkdir -p $W/lib/modules/$KV/extra
 cp $P/display/panel-raydium-rm69220.ko $P/display/3a-ovl.ko $P/display/3a-ovl-gpu.ko $P/display/3a-ovl-wifi.ko $P/display/3a-wlan-pwr.ko $P/display/3a-splash-off.ko \
@@ -64,6 +67,8 @@ start() {
 		# vibration motor waveforms (rt6010-haptics.ko loads them into the chip's RAM)
 		H=$(find /mnt/vendor/firmware /mnt/vendor/etc -name haptic_config.bin 2>/dev/null | head -1)
 		[ -n "$H" ] && cp $H /lib/firmware/
+		# speaker amp container (profiles, register settings) for snd-soc-tfa98xx.ko
+		[ -f /mnt/vendor/firmware/tfa98xx.cnt ] && cp /mnt/vendor/firmware/tfa98xx.cnt /lib/firmware/
 		umount /mnt/vendor
 		dmsetup remove vendor_a
 	fi
@@ -99,6 +104,8 @@ start() {
 		printf 'KWIN_COMPOSE=Q\nLIBGL_ALWAYS_SOFTWARE=1\nQT_QUICK_BACKEND=software\n' >> /etc/environment
 		sed 's/^/export /' /etc/environment | grep -E 'KWIN_COMPOSE|LIBGL|QT_QUICK' >> /etc/profile.d/soft-gl.sh
 	}
+	# GPU at full clock: simple_ondemand ramps up too late, the shade and app launches stutter
+	echo performance > /sys/class/devfreq/3d00000.gpu/governor 2>/dev/null
 	# firmware straight from the phone's own modem_a, READ-ONLY (never write to UFS)
 	F=/lib/firmware/qcom/milos/nothing/asteroids
 	M=$(for d in /sys/class/block/sd*; do grep -q '^PARTNAME=modem_a$' $d/uevent && basename $d; done)
@@ -193,12 +200,18 @@ else
 	# Plasma Mobile: tinydm autologin, KWin (night light and double-tap wake are KWin's own)
 	chroot $W rc-update del greetd default >/dev/null 2>&1 || true
 	chroot $W rc-update add tinydm default >/dev/null
+	# status bar below the camera hole, clock and icons beside it (envmanager picks the preset by
+	# the DT compatible at session start)
+	install -D -m 644 "$P/nothing,asteroids.conf" "$W/usr/share/plasma-mobile-device-presets/nothing,asteroids.conf"
 fi
-# KWin output scale 3.1 (kwinoutputconfig.json from the phone, if pulled)
+# KWin output: scale 2.7, auto-rotation always (kwinoutputconfig.json from the phone)
 [ -f $P/kwinoutputconfig.json ] && { mkdir -p $W/home/user/.config; cp $P/kwinoutputconfig.json $W/home/user/.config/; chown -R 10000:10000 $W/home/user/.config; }
 # clock: the initramfs sets it from the PC (send-rootfs.py); hwclock would reset it to the PMIC
 # RTC, which counts from 1970 (Android keeps the offset in its own data)
 chroot $W rc-update del hwclock boot >/dev/null 2>&1 || true
+# syslog and klogd "need clock": without a provider OpenRC starts hwclock anyway; osclock provides
+# it and does nothing
+chroot $W rc-update add osclock boot >/dev/null 2>&1 || true
 [ -e $W/etc/localtime ] || ln -s /usr/share/zoneinfo/Europe/Moscow $W/etc/localtime
 # apk runs in the chroot need WSL's resolv.conf; on the phone NetworkManager writes its own
 rm -f $W/etc/resolv.conf

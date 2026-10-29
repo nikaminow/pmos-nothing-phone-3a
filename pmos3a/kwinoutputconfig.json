@@ -3,7 +3,7 @@
         "data": [
             {
                 "allowDdcCi": true,
-                "allowSdrSoftwareBrightness": true,
+                "allowSdrSoftwareBrightness": false,
                 "autoBrightnessCurve": [
                     0,
                     0,
@@ -12,7 +12,7 @@
                     0,
                     0
                 ],
-                "autoRotation": "InTabletMode",
+                "autoRotation": "Always",
                 "automaticBrightness": false,
                 "brightness": 1,
                 "colorPowerTradeoff": "PreferEfficiency",
@@ -33,7 +33,7 @@
                 },
                 "overscan": 0,
                 "rgbRange": "Automatic",
-                "scale": 1.25,
+                "scale": 2.7,
                 "sdrBrightness": 200,
                 "sdrGamutWideness": 0,
                 "sharpness": 0,

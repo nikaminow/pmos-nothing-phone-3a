@@ -1,0 +1,29 @@
+drm/msm/dpu: milos gamma LUT channel order is R, G, B
+
+KWin's night light (GAMMA_LUT) turned the screen blue on the Nothing Phone (3a).
+---
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_crtc.c	2026-10-29 16:10:28.759532035 +0300
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_crtc.c	2026-10-29 16:10:29.196994540 +0300
+@@ -829,14 +829,18 @@
+ 
+ 	/* Pack 1024 10-bit entries in 512 32-bit registers */
+ 	for (i = 0; i < PGC_TBL_LEN; i++) {
++		/*
++		 * milos (DPU 10.2): the GC tables are c0 = red, c1 = green, c2 = blue; the green,
++		 * blue, red order of older DPUs turned KWin's night light blue
++		 */
++		val_even = drm_color_lut_extract(lut[i * 2].red, 10);
++		val_odd = drm_color_lut_extract(lut[i * 2 + 1].red, 10);
++		gc_lut->c0[i] = val_even | (val_odd << 16);
+ 		val_even = drm_color_lut_extract(lut[i * 2].green, 10);
+ 		val_odd = drm_color_lut_extract(lut[i * 2 + 1].green, 10);
+-		gc_lut->c0[i] = val_even | (val_odd << 16);
++		gc_lut->c1[i] = val_even | (val_odd << 16);
+ 		val_even = drm_color_lut_extract(lut[i * 2].blue, 10);
+ 		val_odd = drm_color_lut_extract(lut[i * 2 + 1].blue, 10);
+-		gc_lut->c1[i] = val_even | (val_odd << 16);
+-		val_even = drm_color_lut_extract(lut[i * 2].red, 10);
+-		val_odd = drm_color_lut_extract(lut[i * 2 + 1].red, 10);
+ 		gc_lut->c2[i] = val_even | (val_odd << 16);
+ 	}
+ 

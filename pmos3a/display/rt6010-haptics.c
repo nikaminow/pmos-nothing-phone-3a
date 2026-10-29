@@ -72,6 +72,11 @@
 
 #define RT6010_FIRMWARE			"haptic_config.bin"
 
+/* strength ceiling, 1..RT6010_GAIN; Nothing's full gain felt far too strong for UI feedback */
+static unsigned int max_gain = 0x20;
+module_param(max_gain, uint, 0644);
+MODULE_PARM_DESC(max_gain, "vibration strength ceiling, 1-128 (default 32)");
+
 struct rt6010 {
 	struct regmap *regmap;
 	struct device *dev;
@@ -253,7 +258,8 @@ static void rt6010_play_work(struct work_struct *work)
 	regmap_write(rt->regmap, RT6010_REG_RAM_ADDR_L, RT6010_LIST_BASE & 0xff);
 	regmap_raw_write(rt->regmap, RT6010_REG_RAM_DATA, playlist, sizeof(playlist));
 	/* never above the gain Nothing configures for this motor */
-	regmap_write(rt->regmap, RT6010_REG_GAIN_CFG, max(1U, (unsigned int)RT6010_GAIN * magnitude / 0xffff));
+	regmap_write(rt->regmap, RT6010_REG_GAIN_CFG,
+		     max(1U, clamp(READ_ONCE(max_gain), 1U, (unsigned int)RT6010_GAIN) * magnitude / 0xffff));
 	regmap_write(rt->regmap, RT6010_REG_PLAY_MODE, RT6010_PLAY_MODE_RAM);
 	regmap_write(rt->regmap, RT6010_REG_PLAY_CTRL, 0x01);
 }
