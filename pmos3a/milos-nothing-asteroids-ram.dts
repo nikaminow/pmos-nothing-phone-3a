@@ -2,8 +2,10 @@
 /*
  * Nothing Phone (3a), booted from RAM by pmos3a/shim.S (fastboot boot, nothing flashed).
  * The upstream board DTS plus what the shim's setup needs:
- * - ABL's DTB is replaced, so memory is ours: only the 4 GiB bank probe v2 found
- *   free of firmware carve-outs;
+ * - ABL's DTB is replaced, so the memory map is ours: ABL's own map (abl-memmap.py from abl.dts,
+ *   7.44 GiB in 13 ranges, firmware carve-outs already cut out by ABL; its only carve-out left
+ *   inside, the splash, is reserved in the board DTS). It used to be only the 4 GiB bank, which
+ *   left Plasma ~750 MB and made it stutter;
  * - the initramfs is copied by the shim to 0x9_1000_0000 (end patched by make-boot);
  * - USB role normally comes from pmic-glink (ADSP firmware, not loaded): force device mode.
  */
@@ -12,7 +14,19 @@
 / {
 	memory@900000000 {
 		device_type = "memory";
-		reg = <0x9 0x00000000 0x1 0x00000000>;
+		reg = <0x0 0x80e00000 0x0 0x00a00000>,
+		      <0x0 0x81cf5000 0x0 0x0000a000>,
+		      <0x0 0x82320000 0x0 0x00180000>,
+		      <0x0 0x82800000 0x0 0x08400000>,
+		      <0x0 0x9ea9c000 0x0 0x00064000>,
+		      <0x0 0x9f300000 0x0 0x07100000>,
+		      <0x0 0xa7000000 0x0 0x39600000>,
+		      <0x0 0xe0a00000 0x0 0x07f00000>,
+		      <0x0 0xeea00000 0x0 0x11600000>,
+		      <0x8 0x80000000 0x0 0x2fafe000>,
+		      <0x8 0xb0000000 0x0 0x09700000>,
+		      <0x8 0xbf800000 0x0 0x40800000>,
+		      <0x9 0x00000000 0x1 0x00000000>;
 	};
 
 	chosen {

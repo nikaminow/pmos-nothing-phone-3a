@@ -16,6 +16,10 @@ mkdir -p $W/lib/modules/$KV/extra
 cp $P/display/panel-raydium-rm69220.ko $P/display/3a-ovl.ko $P/display/3a-ovl-gpu.ko $P/display/3a-ovl-wifi.ko $P/display/3a-wlan-pwr.ko $P/display/3a-splash-off.ko \
 	$P/display/3a-ovl-haptics.ko $P/display/rt6010-haptics.ko $P/display/3a-ovl-audio-i2c.ko $W/lib/modules/$KV/extra/
 cp $P/display/3a-haptics.dtbo $P/display/3a-audio-i2c.dtbo $W/lib/firmware/
+# speaker amps (AUDIO-PLAN stage B/C): driver kept outside the module tree so nothing autoloads it,
+# plus the AudioReach topology; loaded by hand with allow_start=0 until protection works
+install -D -m 644 $P/audio/snd-soc-tfa98xx.ko $W/usr/local/lib/3a/snd-soc-tfa98xx.ko
+install -D -m 644 $P/audio/Nothing-Phone-3a-tplg.bin $W/lib/firmware/qcom/milos/Nothing-Phone-3a-tplg.bin
 install -D -m 644 $P/72-3a-haptics.rules $W/usr/lib/udev/rules.d/72-3a-haptics.rules
 cp $P/display/3a-display.dtbo $P/display/3a-gpu.dtbo $P/display/3a-wifi.dtbo $W/lib/firmware/
 chroot $W depmod $KV
@@ -203,12 +207,25 @@ else
 	# status bar below the camera hole, clock and icons beside it (envmanager picks the preset by
 	# the DT compatible at session start)
 	install -D -m 644 "$P/nothing,asteroids.conf" "$W/usr/share/plasma-mobile-device-presets/nothing,asteroids.conf"
+	# mobileshell rebuilt with volume/notification popups below the status bar (build-plasma-mobile.sh);
+	# the original is kept as .orig
+	M=$W/usr/lib/qt6/qml/org/kde/plasma/private/mobileshell/libmobileshellplugin.so
+	# disabled: with it the status bar loses the preset height (cause not found yet)
+	if false && [ -f $P/out/libmobileshellplugin.so ]; then
+		[ -f $M.orig ] || cp $M $M.orig
+		install -m 755 $P/out/libmobileshellplugin.so $M
+	fi
 fi
 # KWin output: scale 2.7, auto-rotation always (kwinoutputconfig.json from the phone)
 [ -f $P/kwinoutputconfig.json ] && { mkdir -p $W/home/user/.config; cp $P/kwinoutputconfig.json $W/home/user/.config/; chown -R 10000:10000 $W/home/user/.config; }
 # clock: the initramfs sets it from the PC (send-rootfs.py); hwclock would reset it to the PMIC
 # RTC, which counts from 1970 (Android keeps the offset in its own data)
 chroot $W rc-update del hwclock boot >/dev/null 2>&1 || true
+# no system suspend: the phone does not come back from deep sleep yet (it fell back to Android);
+# screen-off still works, the SoC just stays up
+mkdir -p $W/etc/elogind/sleep.conf.d
+printf '[Sleep]\nAllowSuspend=no\nAllowHibernation=no\nAllowHybridSleep=no\nAllowSuspendThenHibernate=no\n' \
+	> $W/etc/elogind/sleep.conf.d/3a-no-suspend.conf
 # syslog and klogd "need clock": without a provider OpenRC starts hwclock anyway; osclock provides
 # it and does nothing
 chroot $W rc-update add osclock boot >/dev/null 2>&1 || true
