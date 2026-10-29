@@ -1,7 +1,7 @@
 """Send out/rootfs.tar.gz (or the given tarball) to the 3a initramfs over its USB serial port
 (CDC ACM, VID 18d1 PID d003): send-rootfs.py [rootfs.tar.gz]"""
-import os, subprocess, sys
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out')
+import os, subprocess, sys, time
+out =os.path.join(os.path.dirname(os.path.abspath(__file__)), 'out')
 # default: the squashfs rootfs (initramfs mounts it + overlay), else the old tar.gz
 p = sys.argv[1] if len(sys.argv) > 1 else next(
     (os.path.join(out, f) for f in ('rootfs.sqfs', 'rootfs.tar.gz') if os.path.exists(os.path.join(out, f))))
@@ -18,13 +18,14 @@ with open(p, 'rb') as f:
         h.update(b)
 print(f'{port}: sending {total >> 20} MiB, md5 {h.hexdigest()[:12]} (compare with the phone)')
 with open(r'\\.\%s' % port, 'wb', buffering=0) as s, open(p, 'rb') as f:
-    s.write(f'{total}\n'.encode())
+    # "SIZE UNIXTIME": the PMIC RTC is read-only to us and Android keeps the offset in its data,
+    # so the phone would start at 1970; the initramfs sets the clock from the PC
+    s.write(f'{total} {int(time.time())}\n'.encode())
     n = 0
-    import time
     # 16 KiB + 2 ms (~8 MB/s), verified (md5 matched); 32 KiB lost data, unthrottled too
     while b := f.read(1 << 14):
         s.write(b)
         time.sleep(0.002)
         n += len(b)
         print(f'\r{n >> 20}/{total >> 20} MiB', end='', flush=True)
-print('\ndone: the phone unpacks it and starts Plasma Mobile')
+print('\ndone: the phone mounts it and starts the UI')

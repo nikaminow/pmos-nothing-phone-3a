@@ -34,7 +34,9 @@ echo "UDC: $(cat $G/UDC)  waiting for rootfs on the USB COM port..."
 # and termios resets on the last close, so set raw mode on this open fd, not with stty -F before
 exec 3< /dev/ttyGS0
 stty raw -echo -ixon -ixoff -icrnl -inlcr -istrip clocal <&3
-read -r SZ <&3
+read -r SZ NOW <&3
+# the PC sends its clock along: the PMIC RTC is read-only and the phone would start at 1970
+[ -n "$NOW" ] && date -s "@$NOW" >/dev/null
 echo "receiving $SZ bytes"
 head -c "$SZ" <&3 > /ram/rootfs
 echo "got $(stat -c %s /ram/rootfs) of $SZ bytes, md5 $(md5sum /ram/rootfs | cut -c1-12)"
