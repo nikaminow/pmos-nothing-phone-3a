@@ -1,0 +1,174 @@
+ASoC: qcom: audioreach: register and calibrate vendor CAPI modules from firmware
+
+AMDB registration (qcom/audioreach/amdb-modules.bin) before the first graph opens and
+APM_CMD_SET_CFG calibration (qcom/audioreach/module-<id>.bin) for 0x17xxxxxx modules, for the
+TFA9873 speaker protection (Goodix tfadsp) on the Nothing Phone (3a). Applies on top of the
+Nura patch.
+---
+--- a/sound/soc/qcom/qdsp6/audioreach.h
++++ b/sound/soc/qcom/qdsp6/audioreach.h
+@@ -43,6 +43,7 @@
+ #define APM_MODULE_INSTANCE_ID		0x00000001
+ #define PRM_MODULE_INSTANCE_ID		0x00000002
+ #define AMDB_MODULE_INSTANCE_ID		0x00000003
++#define AMDB_CMD_REGISTER_MODULES	0x0100101E
+ #define VCPM_MODULE_INSTANCE_ID		0x00000004
+ #define AR_MODULE_INSTANCE_ID_START	0x00006000
+ #define AR_MODULE_INSTANCE_ID_END	0x00007000
+--- a/sound/soc/qcom/qdsp6/audioreach.c
++++ b/sound/soc/qcom/qdsp6/audioreach.c
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: GPL-2.0
+ // Copyright (c) 2020, Linaro Limited
+ 
++#include <linux/firmware.h>
+ #include <linux/kernel.h>
+ #include <linux/slab.h>
+ #include <linux/soc/qcom/apr.h>
+@@ -1349,6 +1350,56 @@
+ 	return rc;
+ }
+ 
++/*
++ * Vendor CAPI modules (module IDs 0x17xxxxxx, e.g. a smart-amp speaker protection library the
++ * ADSP loads through AMDB): their calibration comes from the firmware file
++ * qcom/audioreach/module-<module id>.bin, a ready APM_CMD_SET_CFG payload (struct
++ * apm_module_param_data headers, each followed by its data padded to 8 bytes). The instance IDs in
++ * the file are replaced by this graph's instance of the module.
++ */
++static int audioreach_vendor_module_cfg(struct q6apm_graph *graph,
++					const struct audioreach_module *module)
++{
++	struct apm_module_param_data *param;
++	const struct firmware *fw;
++	struct gpr_pkt *pkt;
++	size_t off;
++	char name[48];
++	void *p;
++	int rc;
++
++	snprintf(name, sizeof(name), "qcom/audioreach/module-%08x.bin", module->module_id);
++	if (firmware_request_nowarn(&fw, name, graph->dev))
++		return 0;
++
++	pkt = audioreach_alloc_apm_cmd_pkt(fw->size, APM_CMD_SET_CFG, 0);
++	if (IS_ERR(pkt)) {
++		release_firmware(fw);
++		return PTR_ERR(pkt);
++	}
++
++	p = (void *)pkt + GPR_HDR_SIZE + APM_CMD_HDR_SIZE;
++	memcpy(p, fw->data, fw->size);
++	for (off = 0; off + sizeof(*param) <= fw->size;
++	     off += sizeof(*param) + ALIGN(param->param_size, 8)) {
++		param = p + off;
++		param->module_instance_id = module->instance_id;
++	}
++	if (off != fw->size) {
++		dev_err(graph->dev, "%s: bad param list\n", name);
++		rc = -EINVAL;
++	} else {
++		rc = q6apm_send_cmd_sync(graph->apm, pkt, 0);
++		dev_info(graph->dev, "module 0x%08x iid 0x%x: %zu bytes of calibration sent (%d)\n",
++			 module->module_id, module->instance_id, fw->size, rc);
++	}
++
++	kfree(pkt);
++	release_firmware(fw);
++
++	return rc;
++}
++
+ int audioreach_set_media_format(struct q6apm_graph *graph,
+ 				const struct audioreach_module *module,
+ 				const struct audioreach_module_config *cfg)
+@@ -1415,6 +1466,8 @@
+ 
+ 	default:
+ 		rc = 0;
++		if ((module->module_id >> 24) == 0x17)
++			rc = audioreach_vendor_module_cfg(graph, module);
+ 	}
+ 
+ 	return rc;
+--- a/sound/soc/qcom/qdsp6/q6apm.h
++++ b/sound/soc/qcom/qdsp6/q6apm.h
+@@ -68,6 +68,7 @@
+ 	struct idr sub_graphs_idr;
+ 	struct idr containers_idr;
+ 	struct idr modules_idr;
++	bool vendor_modules_registered;
+ };
+ 
+ struct audio_buffer {
+--- a/sound/soc/qcom/qdsp6/q6apm.c
++++ b/sound/soc/qcom/qdsp6/q6apm.c
+@@ -3,6 +3,7 @@
+ 
+ #include <dt-bindings/soc/qcom,gpr.h>
+ #include <linux/delay.h>
++#include <linux/firmware.h>
+ #include <linux/jiffies.h>
+ #include <linux/kernel.h>
+ #include <linux/module.h>
+@@ -728,6 +729,8 @@
+ 	return module->instance_id;
+ }
+ 
++static void q6apm_register_vendor_modules(struct q6apm *apm);
++
+ struct q6apm_graph *q6apm_graph_open(struct device *dev, q6apm_cb cb,
+ 				     void *priv, int graph_id, int dir)
+ {
+@@ -736,6 +739,7 @@
+ 	struct q6apm_graph *graph;
+ 	int ret, iid = 0;
+ 
++	q6apm_register_vendor_modules(apm);
+ 	ar_graph = q6apm_get_audioreach_graph(apm, graph_id);
+ 	if (IS_ERR(ar_graph)) {
+ 		dev_err(dev, "No graph found with id %d\n", graph_id);
+@@ -863,6 +867,35 @@
+ 	.remove_order   = SND_SOC_COMP_ORDER_LAST,
+ };
+ 
++/*
++ * Vendor CAPI modules are loaded by the ADSP on demand once registered with its AMDB (on Android
++ * the audio HAL does this from ACDB). qcom/audioreach/amdb-modules.bin, if present, is the
++ * AMDB_CMD_REGISTER_MODULES payload (amdb_module_registration_t). Done before the first graph
++ * is opened, so the file may be installed after boot.
++ */
++static void q6apm_register_vendor_modules(struct q6apm *apm)
++{
++	const struct firmware *fw;
++	struct gpr_pkt *pkt;
++	int rc;
++
++	if (apm->vendor_modules_registered)
++		return;
++	if (firmware_request_nowarn(&fw, "qcom/audioreach/amdb-modules.bin", apm->dev))
++		return;
++	apm->vendor_modules_registered = true;
++
++	pkt = audioreach_alloc_cmd_pkt(fw->size, AMDB_CMD_REGISTER_MODULES, 0,
++				       GPR_APM_MODULE_IID, AMDB_MODULE_INSTANCE_ID);
++	if (!IS_ERR(pkt)) {
++		memcpy((void *)pkt + GPR_HDR_SIZE + APM_CMD_HDR_SIZE, fw->data, fw->size);
++		rc = q6apm_send_cmd_sync(apm, pkt, 0);
++		dev_info(apm->dev, "AMDB: registered vendor modules (%zu bytes): %d\n", fw->size, rc);
++		kfree(pkt);
++	}
++	release_firmware(fw);
++}
++
+ static int apm_probe(gpr_device_t *gdev)
+ {
+ 	struct device *dev = &gdev->dev;
+@@ -953,6 +986,7 @@
+ 		case APM_CMD_GRAPH_FLUSH:
+ 		case APM_CMD_GRAPH_STOP:
+ 		case APM_CMD_SET_CFG:
++		case AMDB_CMD_REGISTER_MODULES:
+ 			apm->result.opcode = result->opcode;
+ 			apm->result.status = result->status;
+ 			if (result->status)

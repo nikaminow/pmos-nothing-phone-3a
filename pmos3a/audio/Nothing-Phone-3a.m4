@@ -58,7 +58,7 @@ DEVICE_SG_ADD(audioreach/subgraph-device-codec-dma-playback.m4, `WSA_CODEC_DMA_R
 	0x00004005, 0x00004005, 0x00006050)
 dnl
 dnl Primary MI2S Playback
-DEVICE_SG_ADD(audioreach/subgraph-device-i2s-playback.m4, `Primary', PRIMARY_MI2S_RX,
+DEVICE_SG_ADD(subgraph-device-i2s-playback-tfa.m4, `Primary', PRIMARY_MI2S_RX,
 	`S32_LE', 48000, 48000, 2, 2,
 	LPAIF_INTF_TYPE_LPAIF, I2S_INTF_TYPE_PRIMARY, SD_LINE_IDX_I2S_SD1, DATA_FORMAT_FIXED_POINT,
 	0x00004006, 0x00004006, 0x00006060, `PRIMARY_MI2S_RX')

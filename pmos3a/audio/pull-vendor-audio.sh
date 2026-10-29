@@ -2,7 +2,6 @@
 # Collect the vendor audio configuration for AUDIO-PLAN stage C (speaker protection on the ADSP):
 # ACDB calibration, AudioReach/PAL xml, TFA DSP module libraries. vendor_a is mapped READ-ONLY.
 # Run on the phone; the result is /tmp/vendor-audio.tgz (pull it with phone-pull.py).
-set -e
 S=$(for d in /sys/class/block/sd*; do grep -q '^PARTNAME=super$' $d/uevent && basename $d; done)
 blockdev --setro /dev/$S
 modprobe dm_mod; modprobe erofs

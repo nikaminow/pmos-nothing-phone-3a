@@ -31,6 +31,26 @@ until protection is loaded and visible in the amp's registers, and hard volume c
   from Nothing's ACDB / tfa98xx.cnt) - the hard part of stage B/C. Until then any test stays at
   very low gain with the chip's own limits only.
 
+## Stage B result (2026-10-29)
+- Ported driver (pmos3a/audio/tfa98xx, allow_start=0 gate) probes both amps, loads tfa98xx.cnt
+  (fw-state Ok, mixer "TFA Profile"); sound card "Nothing-Phone-3a" (qcom,milos-sndcard, overlay
+  3a-audio-i2c) registers with topology qcom/milos/Nothing-Phone-3a-tplg.bin. Amps stay PWDN.
+
+## Android speaker graph (from QRD_acdb_cal.acdb, parsed with the audioreach-graphservices format)
+- AMDB dynamic modules (CAPI v3, loaded on graph open): TFADSP RX 0x1700B911 (libtfadsp_rx.so,
+  entry capi_tfadsp_rx), TFADSP TX 0x1700B912 (libtfadsp_tx.so, capi_tfadsp_tx). Goodix tfadsp 09.00.03.
+- Speaker subgraph (DEVICERX=SPEAKER): ... SAL -> LOG -> TFA_RX -> SPLITTER -> LOG -> I2S sink
+  (Primary MI2S, 48 kHz / 32 bit / 2 ch). IV subgraph (DEVICETX=VI_TX): I2S source (Primary MI2S
+  TX) -> LOG -> SPLITTER -> TFA_TX (sink). RX and TX linked by a control link
+  (APM_PARAM_ID_MODULE_CTRL_LINK_CFG) on port 0x80000000.
+- Calibration: 18 params on TFA_RX (0x1800B920 enable, 0x1800B930..41: raw TFA DSP messages:
+  selectors, speaker model, algo params, MBDRC, EQ, excursion filters, gains, senses, Re25C),
+  TX only enable. Extracted blobs stay local in out/vendor-audio/extracted (proprietary).
+- Needed in mainline: AMDB_CMD_REGISTER_MODULES at q6apm probe, APM_CMD_SET_CFG with the blobs
+  for the TFA modules, the control link in the graph packet; topology with TFA_RX before the I2S
+  sink and an IV subgraph on the same back end. Open risk: whether the ADSP can load the .so through
+  our root-PD hexagonrpcd (Android may use a static audio PD).
+
 ## Stages
 A. **No sound, no risk.** Enable i2c@898000 without any amp driver; release reset and only READ
    the revision register (amps power up in PWDN; no I2S clock = no sound possible). Copy
