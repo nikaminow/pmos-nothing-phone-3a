@@ -10,7 +10,10 @@ sed -i -e /KWIN_DRM_NO_AMS/d -e /QT_SCALE_FACTOR/d -e /LIBGL_ALWAYS_SOFTWARE/d -
 	$W/etc/environment $W/etc/profile.d/soft-gl.sh
 # display: panel driver + overlay module + overlay
 mkdir -p $W/lib/modules/$KV/extra
-cp $P/display/panel-raydium-rm69220.ko $P/display/3a-ovl.ko $P/display/3a-ovl-gpu.ko $P/display/3a-ovl-wifi.ko $P/display/3a-wlan-pwr.ko $P/display/3a-splash-off.ko $W/lib/modules/$KV/extra/
+cp $P/display/panel-raydium-rm69220.ko $P/display/3a-ovl.ko $P/display/3a-ovl-gpu.ko $P/display/3a-ovl-wifi.ko $P/display/3a-wlan-pwr.ko $P/display/3a-splash-off.ko \
+	$P/display/3a-ovl-haptics.ko $P/display/rt6010-haptics.ko $W/lib/modules/$KV/extra/
+cp $P/display/3a-haptics.dtbo $W/lib/firmware/
+install -D -m 644 $P/72-3a-haptics.rules $W/usr/lib/udev/rules.d/72-3a-haptics.rules
 cp $P/display/3a-display.dtbo $P/display/3a-gpu.dtbo $P/display/3a-wifi.dtbo $W/lib/firmware/
 chroot $W depmod $KV
 install -D -m 755 /mnt/c/Users/qu33rl1nk/nura-3a/upstream-4a/tools/pil-squash.py $W/usr/local/bin/pil-squash.py
@@ -58,6 +61,9 @@ start() {
 		mkdir -p /mnt/vendor /lib/firmware/qcom
 		mount -t erofs -o ro /dev/mapper/vendor_a /mnt/vendor
 		cp /mnt/vendor/firmware/gen80300_* /lib/firmware/qcom/
+		# vibration motor waveforms (rt6010-haptics.ko loads them into the chip's RAM)
+		H=$(find /mnt/vendor/firmware /mnt/vendor/etc -name haptic_config.bin 2>/dev/null | head -1)
+		[ -n "$H" ] && cp $H /lib/firmware/
 		umount /mnt/vendor
 		dmsetup remove vendor_a
 	fi
@@ -134,6 +140,8 @@ start() {
 	A=$(printf '%08x' $(cat /sys/devices/soc0/serial_number) | sed 's/\(..\)\(..\)\(..\)\(..\)/\1:\2:\3:\4/')
 	btmgmt --index 0 public-addr 22:3a:$A >/dev/null 2>&1
 	modprobe ath11k_ahb
+	# vibration motor: I2C bus + RT6010 (the driver binds through its compatible)
+	modprobe 3a-ovl-haptics
 	# modem + SIM + mobile data, in the background (about a minute)
 	start-stop-daemon -b -S -x /usr/local/bin/3a-modem
 	# sensors (ADSP SSC via hexagonrpcd + libssc), in the background

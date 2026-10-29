@@ -1,0 +1,2 @@
+# Nothing Phone (3a) vibration motor (rt6010-haptics.ko): let feedbackd drive it
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT}=="1", SUBSYSTEMS=="input", ATTRS{name}=="rt6010-haptics", TAG+="uaccess", ENV{FEEDBACKD_TYPE}="vibra"

@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Nothing Phone (3a) vibration motor: RT6010 LRA driver (Nothing's "ics,haptic_rt") at 0x5f on
+ * QUP1 SE1 (i2c@884000), applied at runtime by 3a-ovl-haptics.ko. The bus is missing from
+ * milos.dtsi; it is a copy of i2c7 (SE0) with SE1's interrupt, clock, DMA channel and pins,
+ * all from ABL's DTB: SPI 583, GCC_QUPV3_WRAP1_S1_CLK, gpi_dma1 channel 1, SDA gpio36, SCL gpio37.
+ * Motor: enable gpio138, irq gpio143 (both pulsed low on reset), f0 170.0 Hz.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,milos-gcc.h>
+#include <dt-bindings/dma/qcom-gpi.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interconnect/qcom,icc.h>
+#include <dt-bindings/interconnect/qcom,milos-rpmh.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+&tlmm {
+	qup_i2c8_data_clk: qup-i2c8-data-clk-state {
+		/* SDA, SCL */
+		pins = "gpio36", "gpio37";
+		function = "qup1_se1";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+};
+
+&gpi_dma1 {
+	status = "okay";
+};
+
+&qupv3_id_1 {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	status = "okay";
+
+	i2c@884000 {
+		compatible = "qcom,geni-i2c";
+		reg = <0x0 0x00884000 0x0 0x4000>;
+
+		interrupts = <GIC_SPI 583 IRQ_TYPE_LEVEL_HIGH 0>;
+
+		clocks = <&gcc GCC_QUPV3_WRAP1_S1_CLK>;
+		clock-names = "se";
+
+		interconnects = <&clk_virt MASTER_QUP_CORE_1 QCOM_ICC_TAG_ALWAYS
+				 &clk_virt SLAVE_QUP_CORE_1 QCOM_ICC_TAG_ALWAYS>,
+				<&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
+				 &cnoc_cfg SLAVE_QUP_1 QCOM_ICC_TAG_ACTIVE_ONLY>,
+				<&aggre1_noc MASTER_QUP_1 QCOM_ICC_TAG_ALWAYS
+				 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
+		interconnect-names = "qup-core",
+				     "qup-config",
+				     "qup-memory";
+
+		dmas = <&gpi_dma1 0 1 QCOM_GPI_I2C>,
+		       <&gpi_dma1 1 1 QCOM_GPI_I2C>;
+		dma-names = "tx",
+			    "rx";
+
+		pinctrl-0 = <&qup_i2c8_data_clk>;
+		pinctrl-names = "default";
+
+		clock-frequency = <400000>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		status = "okay";
+
+		haptics@5f {
+			compatible = "nothing,rt6010-haptics";
+			reg = <0x5f>;
+			enable-gpios = <&tlmm 138 GPIO_ACTIVE_HIGH>;
+			irq-gpios = <&tlmm 143 GPIO_ACTIVE_HIGH>;
+		};
+	};
+};
