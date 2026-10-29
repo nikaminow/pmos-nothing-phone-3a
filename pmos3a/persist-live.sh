@@ -185,6 +185,8 @@ if [ -f $P/nothing,asteroids.json ]; then
 fi
 # KWin output scale 3.1 (kwinoutputconfig.json from the phone, if pulled)
 [ -f $P/kwinoutputconfig.json ] && { mkdir -p $W/home/user/.config; cp $P/kwinoutputconfig.json $W/home/user/.config/; chown -R 10000:10000 $W/home/user/.config; }
+# apk runs in the chroot need WSL's resolv.conf; on the phone NetworkManager writes its own
+rm -f $W/etc/resolv.conf
 # squashfs (zlib: fast to decompress on the phone), mounted read-only + tmpfs overlay by the initramfs
 rm -f $P/out/rootfs.sqfs.tmp
 mksquashfs $W $P/out/rootfs.sqfs.tmp -comp gzip -b 256K -noappend -quiet -no-progress -wildcards \

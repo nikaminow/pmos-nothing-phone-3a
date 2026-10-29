@@ -1,3 +1,4 @@
 # Nothing Phone (3a): sensors sit behind the ADSP's Snapdragon Sensor Core (QMI 400 on QRTR);
 # iio-sensor-proxy reaches them through libssc once the FastRPC node is tagged.
-ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", ENV{IIO_SENSOR_PROXY_TYPE}="ssc-accel ssc-light ssc-proximity ssc-compass"
+# The accelerometer is mounted rotated by 180 degrees (screen turned upside down without this).
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", ENV{IIO_SENSOR_PROXY_TYPE}="ssc-accel ssc-light ssc-proximity ssc-compass", ENV{ACCEL_MOUNT_MATRIX}="-1, 0, 0; 0, -1, 0; 0, 0, 1"
